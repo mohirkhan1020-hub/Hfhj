@@ -90,7 +90,6 @@ class MainActivity : Activity() {
             )
         }
 
-        // URL ও Search বার
         val addressBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor("#202124"))
@@ -138,7 +137,6 @@ class MainActivity : Activity() {
         addressBar.addView(urlInput)
         addressBar.addView(goBtn)
 
-        // কুইক শর্টকাট ও ব্লক কাউন্টার বার
         val quickBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor("#292A2D"))
@@ -213,7 +211,6 @@ class MainActivity : Activity() {
                     val uri = request?.url ?: return false
                     val scheme = uri.scheme?.lowercase() ?: ""
                     if (scheme != "http" && scheme != "https") {
-                        // বাইরের অ্যাপ বা স্প্যাম intent:// রিডাইরেক্ট ব্লক
                         return true
                     }
                     val host = uri.host ?: return false
@@ -250,7 +247,7 @@ class MainActivity : Activity() {
                     if (!urlInput.hasFocus() && url != null) {
                         urlInput.setText(url)
                     }
-                    injectCosmeticBlockerJs(view)
+                    injectFullAdBlockerJs(view)
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -258,7 +255,7 @@ class MainActivity : Activity() {
                     if (!urlInput.hasFocus() && url != null) {
                         urlInput.setText(url)
                     }
-                    injectCosmeticBlockerJs(view)
+                    injectFullAdBlockerJs(view)
                 }
             }
 
@@ -296,7 +293,7 @@ class MainActivity : Activity() {
         setContentView(rootContainer)
 
         loadFilterListInBackground()
-        webView.loadUrl("https://www.google.com")
+        webView.loadUrl("https://m.youtube.com")
     }
 
     private fun loadInputUrl() {
@@ -369,7 +366,6 @@ class MainActivity : Activity() {
                     conn.disconnect()
                 }
             } catch (_: Exception) {
-                // ইন্টারনেট স্লো হলে ডিফল্ট লিস্ট দিয়েই চলবে
             }
             updateInfoBar()
         }
@@ -396,11 +392,51 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun injectCosmeticBlockerJs(view: WebView?) {
+    private fun injectFullAdBlockerJs(view: WebView?) {
         val js = """
             (function() {
                 if (window.__universalAdBlock) return;
                 window.__universalAdBlock = true;
+
+                function stripAds(obj) {
+                    if (!obj || typeof obj !== 'object') return obj;
+                    if ('adPlacements' in obj) obj.adPlacements = [];
+                    if ('playerAds' in obj) obj.playerAds = [];
+                    if ('adSlots' in obj) obj.adSlots = [];
+                    if (obj.playerResponse && typeof obj.playerResponse === 'object') {
+                        stripAds(obj.playerResponse);
+                    }
+                    return obj;
+                }
+
+                if (window.ytInitialPlayerResponse) {
+                    stripAds(window.ytInitialPlayerResponse);
+                }
+
+                var origParse = JSON.parse;
+                JSON.parse = function(text, reviver) {
+                    var data = origParse.call(this, text, reviver);
+                    try {
+                        if (location.hostname.indexOf('youtube.com') !== -1) {
+                            return stripAds(data);
+                        }
+                    } catch (e) {}
+                    return data;
+                };
+
+                if (window.Response && Response.prototype.json) {
+                    var origJson = Response.prototype.json;
+                    Response.prototype.json = function() {
+                        return origJson.call(this).then(function(data) {
+                            try {
+                                if (location.hostname.indexOf('youtube.com') !== -1) {
+                                    return stripAds(data);
+                                }
+                            } catch (e) {}
+                            return data;
+                        });
+                    };
+                }
 
                 function addCss() {
                     if (!document.head || document.getElementById('__u_ad_css')) return;
@@ -416,16 +452,70 @@ class MainActivity : Activity() {
                         ytm-ad-slot-renderer,
                         ytm-in-feed-ad-layout-renderer,
                         ytm-promoted-sparkles-web-renderer,
+                        ytm-promoted-sparkles-text-search-renderer,
                         ytm-promoted-video-renderer,
                         ytm-companion-slot-renderer,
-                        ad-slot-renderer {
+                        ad-slot-renderer,
+                        .ytp-ad-overlay-container,
+                        .ytp-ad-message-container {
                             display: none !important;
                         }
                     `;
                     document.head.appendChild(s);
                 }
 
-                setInterval(addCss, 800);
+                setInterval(function() {
+                    addCss();
+
+                    if (location.hostname.indexOf('youtube.com') !== -1) {
+                        if (window.ytInitialPlayerResponse) {
+                            stripAds(window.ytInitialPlayerResponse);
+                        }
+
+                        var player = document.querySelector('#movie_player, .html5-video-player');
+                        var adOverlay = document.querySelector('.ytp-ad-player-overlay-layout, .ytp-ad-text, .ytp-ad-preview-container');
+                        var isAd = (player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'))) || !!adOverlay;
+                        var videos = document.querySelectorAll('video');
+
+                        for (var i = 0; i < videos.length; i++) {
+                            var v = videos[i];
+                            if (isAd) {
+                                if (!window.__ytAdMuted) {
+                                    window.__prevMuted = v.muted;
+                                    window.__ytAdMuted = true;
+                                }
+                                v.muted = true;
+                                try { v.playbackRate = 16.0; } catch (e) {}
+                                if (isFinite(v.duration) && v.duration > 0.5) {
+                                    try { v.currentTime = v.duration - 0.1; } catch (e) {}
+                                }
+                            } else if (window.__ytAdMuted) {
+                                v.muted = !!window.__prevMuted;
+                                try { v.playbackRate = 1.0; } catch (e) {}
+                                window.__ytAdMuted = false;
+                            }
+                        }
+
+                        if (isAd) {
+                            var skipBtns = document.querySelectorAll(
+                                '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, [class*="ytp-skip-ad"], button[aria-label*="Skip"]'
+                            );
+                            for (var j = 0; j < skipBtns.length; j++) {
+                                skipBtns[j].click();
+                            }
+                        }
+                    }
+
+                    if (location.hostname.indexOf('facebook.com') !== -1) {
+                        var spans = document.querySelectorAll('span, a');
+                        for (var k = 0; k < spans.length; k++) {
+                            if (spans[k].textContent && spans[k].textContent.trim() === 'Sponsored') {
+                                var post = spans[k].closest('article, [data-tracking-duration-id]');
+                                if (post) post.style.display = 'none';
+                            }
+                        }
+                    }
+                }, 300);
             })();
         """.trimIndent()
         view?.evaluateJavascript(js, null)
