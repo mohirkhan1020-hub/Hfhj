@@ -2,6 +2,7 @@ package com.wevlo.app
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -114,6 +115,11 @@ class MainActivity : Activity() {
                     return super.shouldInterceptRequest(view, request)
                 }
 
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    injectAdBlockerJs(view)
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     injectAdBlockerJs(view)
@@ -160,56 +166,101 @@ class MainActivity : Activity() {
                 if (window.__adBlockInjected) return;
                 window.__adBlockInjected = true;
 
-                var style = document.createElement('style');
-                style.innerHTML = `
-                    ytm-promoted-sparkles-web-renderer,
-                    ytm-promoted-video-renderer,
-                    ytm-companion-slot-renderer,
-                    ad-slot-renderer,
-                    .ytp-ad-overlay-container,
-                    .ytp-ad-message-container {
-                        display: none !important;
+                // ১. প্লেয়ারের JSON ডেটা থেকেই অ্যাড রিমুভ করা
+                function stripAds(obj) {
+                    if (!obj || typeof obj !== 'object') return obj;
+                    if ('adPlacements' in obj) obj.adPlacements = [];
+                    if ('playerAds' in obj) obj.playerAds = [];
+                    if ('adSlots' in obj) obj.adSlots = [];
+                    if (obj.playerResponse && typeof obj.playerResponse === 'object') {
+                        stripAds(obj.playerResponse);
                     }
-                `;
-                document.head.appendChild(style);
+                    return obj;
+                }
 
-                setInterval(function() {
-                    var player = document.querySelector('#movie_player, .html5-video-player');
-                    var video = document.querySelector('video');
-                    if (player && video) {
-                        var isAd = player.classList.contains('ad-showing') ||
-                                   player.classList.contains('ad-interrupting');
-                        if (isAd) {
-                            if (!window.__ytAdMuted) {
-                                window.__prevMuted = video.muted;
-                                window.__ytAdMuted = true;
-                            }
-                            video.muted = true;
-                            video.playbackRate = 16.0;
-                            if (isFinite(video.duration) && video.duration > 0) {
-                                video.currentTime = video.duration;
-                            }
-                            var skipBtn = document.querySelector(
-                                '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern'
-                            );
-                            if (skipBtn) skipBtn.click();
-                        } else if (window.__ytAdMuted) {
-                            video.muted = !!window.__prevMuted;
-                            video.playbackRate = 1.0;
-                            window.__ytAdMuted = false;
+                var origParse = JSON.parse;
+                JSON.parse = function(text, reviver) {
+                    var data = origParse.call(this, text, reviver);
+                    return stripAds(data);
+                };
+
+                if (window.Response && Response.prototype.json) {
+                    var origJson = Response.prototype.json;
+                    Response.prototype.json = function() {
+                        return origJson.call(this).then(function(data) {
+                            return stripAds(data);
+                        });
+                    };
+                }
+
+                // ২. মোবাইল YouTube-এর ফিড/ব্যানার অ্যাড লুকানোর CSS
+                function addHideCss() {
+                    if (!document.head || document.getElementById('__yt_ad_hide_css')) return;
+                    var style = document.createElement('style');
+                    style.id = '__yt_ad_hide_css';
+                    style.innerHTML = `
+                        ytm-ad-slot-renderer,
+                        ytm-in-feed-ad-layout-renderer,
+                        ytm-promoted-sparkles-web-renderer,
+                        ytm-promoted-sparkles-text-search-renderer,
+                        ytm-promoted-video-renderer,
+                        ytm-companion-slot-renderer,
+                        ad-slot-renderer,
+                        .ytp-ad-overlay-container,
+                        .ytp-ad-message-container {
+                            display: none !important;
                         }
+                    `;
+                    document.head.appendChild(style);
+                }
+
+                // ৩. কোনো ভিডিও অ্যাড তবুও ঢুকে পড়লে সাথে সাথে স্কিপ ও মিউট করা
+                setInterval(function() {
+                    addHideCss();
+
+                    var player = document.querySelector('#movie_player, .html5-video-player');
+                    var adOverlay = document.querySelector('.ytp-ad-player-overlay-layout, .ytp-ad-text');
+                    var video = document.querySelector('video');
+
+                    var isAd = false;
+                    if (player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'))) {
+                        isAd = true;
+                    } else if (adOverlay) {
+                        isAd = true;
                     }
 
-                    if (location.hostname.includes('facebook.com')) {
+                    if (video && isAd) {
+                        if (!window.__ytAdMuted) {
+                            window.__prevMuted = video.muted;
+                            window.__ytAdMuted = true;
+                        }
+                        video.muted = true;
+                        video.playbackRate = 16.0;
+                        if (isFinite(video.duration) && video.duration > 0.5) {
+                            video.currentTime = video.duration - 0.1;
+                        }
+                        var skipBtns = document.querySelectorAll(
+                            '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, button[aria-label*="Skip"], button[class*="skip-ad"]'
+                        );
+                        for (var i = 0; i < skipBtns.length; i++) {
+                            skipBtns[i].click();
+                        }
+                    } else if (video && window.__ytAdMuted) {
+                        video.muted = !!window.__prevMuted;
+                        video.playbackRate = 1.0;
+                        window.__ytAdMuted = false;
+                    }
+
+                    if (location.hostname.indexOf('facebook.com') !== -1) {
                         var spans = document.querySelectorAll('span, a');
-                        for (var i = 0; i < spans.length; i++) {
-                            if (spans[i].textContent && spans[i].textContent.trim() === 'Sponsored') {
-                                var post = spans[i].closest('article, [data-tracking-duration-id]');
+                        for (var j = 0; j < spans.length; j++) {
+                            if (spans[j].textContent && spans[j].textContent.trim() === 'Sponsored') {
+                                var post = spans[j].closest('article, [data-tracking-duration-id]');
                                 if (post) post.style.display = 'none';
                             }
                         }
                     }
-                }, 400);
+                }, 300);
             })();
         """.trimIndent()
 
