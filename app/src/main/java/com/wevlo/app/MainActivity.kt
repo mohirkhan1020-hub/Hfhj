@@ -1,18 +1,28 @@
 package com.wevlo.app
 
+import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
+import android.app.AlertDialog
+import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.view.KeyEvent
+import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
@@ -22,6 +32,7 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
@@ -32,22 +43,53 @@ import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
-import org.schabi.newpipe.extractor.search.SearchInfo
+import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
-import org.schabi.newpipe.extractor.stream.StreamInfoItem
+import java.io.ByteArrayInputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+data class VideoQualityOption(
+    val label: String,
+    val height: Int,
+    val videoUrl: String,
+    val audioUrl: String?,
+    val isHls: Boolean = false
+)
+
 class MainActivity : Activity() {
 
-    private lateinit var searchInput: EditText
-    private lateinit var statusText: TextView
-    private lateinit var resultsContainer: LinearLayout
+    private lateinit var playerSection: LinearLayout
     private lateinit var playerView: PlayerView
-    private var player: ExoPlayer? = null
+    private lateinit var controlBar: LinearLayout
+    private lateinit var statusText: TextView
+    private lateinit var qualityBtn: Button
+    private lateinit var speedBtn: Button
+    private lateinit var webView: WebView
 
+    private var player: ExoPlayer? = null
     private val executor = Executors.newSingleThreadExecutor()
 
+    private var availableQualities: List<VideoQualityOption> = emptyList()
+    private var currentQualityLabel = "Auto"
+    private var currentSpeed = 1.0f
+    private var isFullscreen = false
+
+    private var lastVideoId: String? = null
+    private var lastVideoTime: Long = 0L
+
+    private val adUrlKeywords = listOf(
+        "doubleclick.net",
+        "googlesyndication.com",
+        "googleadservices.com",
+        "adservice.google.com",
+        "youtube.com/pagead",
+        "youtube.com/api/stats/ads",
+        "youtube.com/get_midroll",
+        "youtube.com/ptracking"
+    )
+
+    @SuppressLint("SetJavaScriptEnabled")
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,229 +105,475 @@ class MainActivity : Activity() {
             )
         }
 
-        // ১. উপরের সার্চ বার
-        val searchBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.parseColor("#181818"))
-            setPadding(16, 16, 16, 16)
+        // ১. অ্যাড-ফ্রি ExoPlayer সেকশন (ভিডিও ক্লিক করলে দৃশ্যমান হবে)
+        playerSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
 
-        searchInput = EditText(this).apply {
-            hint = "Search YouTube (Ad-Free)..."
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            setBackgroundColor(Color.parseColor("#272727"))
-            setPadding(24, 16, 24, 16)
-            isSingleLine = true
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            setOnEditorActionListener { _, actionId, event ->
-                if (actionId == EditorInfo.IME_ACTION_SEARCH ||
-                    (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
-                ) {
-                    performSearch()
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-
-        val searchBtn = Button(this).apply {
-            text = "Search"
-            setOnClickListener { performSearch() }
-        }
-
-        searchBar.addView(searchInput)
-        searchBar.addView(searchBtn)
-
-        // ২. নিজস্ব ExoPlayer ভিডিও প্লেয়ার (16:9 সাইজ)
         val playerHeight = (resources.displayMetrics.widthPixels * 9) / 16
         playerView = PlayerView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 playerHeight
             )
-            setBackgroundColor(Color.BLACK)
+            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+            setShowNextButton(false)
+            setShowPreviousButton(false)
+            setFullscreenButtonClickListener { shouldEnterFullscreen ->
+                toggleFullscreen(shouldEnterFullscreen)
+            }
         }
 
-        player = ExoPlayer.Builder(this).build()
+        player = ExoPlayer.Builder(this)
+            .setSeekBackIncrementMs(10_000L)
+            .setSeekForwardIncrementMs(10_000L)
+            .build()
         playerView.player = player
 
-        // ৩. ভিডিও টাইটেল ও স্ট্যাটাস
-        statusText = TextView(this).apply {
-            text = "যেকোনো কিছু সার্চ করে ভিডিও প্লে করুন (0% Ads)"
-            setTextColor(Color.WHITE)
-            textSize = 15f
-            setTypeface(null, Typeface.BOLD)
+        // ২. প্লেয়ারের নিচের কন্ট্রোল বার (টাইটেল + Quality + Speed + Close)
+        controlBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.parseColor("#181818"))
-            setPadding(24, 20, 24, 20)
+            setPadding(16, 10, 16, 10)
         }
 
-        // ৪. সার্চ রেজাল্ট লিস্ট
-        val scrollView = ScrollView(this).apply {
+        statusText = TextView(this).apply {
+            text = "Loading..."
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            maxLines = 2
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(0, 0, 12, 0)
+            }
+        }
+
+        qualityBtn = Button(this).apply {
+            text = "Quality"
+            textSize = 11f
+            setPadding(18, 6, 18, 6)
+            setOnClickListener { showQualityDialog() }
+        }
+
+        speedBtn = Button(this).apply {
+            text = "1.0x"
+            textSize = 11f
+            setPadding(18, 6, 18, 6)
+            setOnClickListener { showSpeedDialog() }
+        }
+
+        val closeBtn = Button(this).apply {
+            text = "✕"
+            textSize = 12f
+            setPadding(18, 6, 18, 6)
+            setOnClickListener { closePlayer() }
+        }
+
+        controlBar.addView(statusText)
+        controlBar.addView(qualityBtn)
+        controlBar.addView(speedBtn)
+        controlBar.addView(closeBtn)
+
+        playerSection.addView(playerView)
+        playerSection.addView(controlBar)
+
+        // ৩. নিচে আসল YouTube UI (WebView)
+        webView = WebView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
                 1f
             )
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                javaScriptCanOpenWindowsAutomatically = false
+                setSupportMultipleWindows(false)
+            }
+
+            val cm = CookieManager.getInstance()
+            cm.setAcceptCookie(true)
+            cm.setAcceptThirdPartyCookies(this, true)
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url?.toString() ?: return false
+                    val videoId = extractYouTubeVideoId(url)
+                    if (videoId != null) {
+                        handleVideoClick(videoId, view, fromSpa = false)
+                        return true
+                    }
+                    return false
+                }
+
+                override fun doUpdateVisitedHistory(
+                    view: WebView?,
+                    url: String?,
+                    isReload: Boolean
+                ) {
+                    super.doUpdateVisitedHistory(view, url, isReload)
+                    if (url != null) {
+                        val videoId = extractYouTubeVideoId(url)
+                        if (videoId != null) {
+                            handleVideoClick(videoId, view, fromSpa = true)
+                        }
+                    }
+                }
+
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val url = request?.url?.toString()?.lowercase() ?: return null
+                    if (adUrlKeywords.any { url.contains(it) }) {
+                        return WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    injectFeedAdHideCss(view)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    injectFeedAdHideCss(view)
+                }
+            }
         }
 
-        resultsContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(16, 12, 16, 24)
-        }
-        scrollView.addView(resultsContainer)
-
-        root.addView(searchBar)
-        root.addView(playerView)
-        root.addView(statusText)
-        root.addView(scrollView)
+        root.addView(playerSection)
+        root.addView(webView)
         setContentView(root)
 
-        // শুরুতে কিছু ভিডিও লোড করা
-        searchYouTube("nature 4k")
+        webView.loadUrl("https://m.youtube.com")
+        handleIncomingIntent(intent)
     }
 
-    private fun performSearch() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(searchInput.windowToken, 0)
-        searchInput.clearFocus()
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
 
-        val query = searchInput.text.toString().trim()
-        if (query.isNotEmpty()) {
-            searchYouTube(query)
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+        val text = when (intent.action) {
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+            Intent.ACTION_VIEW -> intent.dataString
+            else -> null
+        } ?: return
+
+        val urlMatch = Regex("https?://\\S+").find(text)?.value ?: text
+        val videoId = extractYouTubeVideoId(urlMatch)
+        if (videoId != null) {
+            playYouTubeVideo("https://www.youtube.com/watch?v=$videoId")
         }
     }
 
-    private fun searchYouTube(query: String) {
-        statusText.text = "Searching: $query ..."
-        resultsContainer.removeAllViews()
+    private fun extractYouTubeVideoId(url: String): String? {
+        val uri = Uri.parse(url)
+        val host = uri.host?.lowercase() ?: return null
+        if (!host.contains("youtube.com") && !host.contains("youtu.be")) return null
 
-        executor.execute {
-            try {
-                val ytService = ServiceList.YouTube
-                val queryHandler = ytService.searchQHFactory.fromQuery(query, listOf("videos"), "")
-                val searchInfo = SearchInfo.getInfo(ytService, queryHandler)
-                val videos = searchInfo.relatedItems.filterIsInstance<StreamInfoItem>()
-
-                runOnUiThread {
-                    statusText.text = "Found ${videos.size} videos — ট্যাপ করে প্লে করুন"
-                    showVideoList(videos)
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    statusText.text = "Search error: ${e.localizedMessage}"
-                }
-            }
+        if (host.contains("youtu.be")) {
+            return uri.pathSegments.firstOrNull()?.takeIf { it.isNotBlank() }
         }
+        val vParam = uri.getQueryParameter("v")
+        if (!vParam.isNullOrBlank()) return vParam
+
+        val segments = uri.pathSegments
+        if (segments.size >= 2 &&
+            (segments[0] == "shorts" || segments[0] == "embed" || segments[0] == "live")
+        ) {
+            return segments[1].takeIf { it.isNotBlank() }
+        }
+        return null
     }
 
-    private fun showVideoList(videos: List<StreamInfoItem>) {
-        resultsContainer.removeAllViews()
-        for (item in videos) {
-            val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setBackgroundColor(Color.parseColor("#1E1E1E"))
-                setPadding(24, 20, 24, 20)
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(0, 0, 0, 14)
-                }
-                setOnClickListener {
-                    playYouTubeVideo(item.url, item.name)
-                }
-            }
+    private fun handleVideoClick(videoId: String, view: WebView?, fromSpa: Boolean) {
+        val now = System.currentTimeMillis()
+        if (videoId == lastVideoId && now - lastVideoTime < 2000L) return
+        lastVideoId = videoId
+        lastVideoTime = now
 
-            val titleView = TextView(this).apply {
-                text = item.name
-                setTextColor(Color.WHITE)
-                textSize = 15f
-                setTypeface(null, Typeface.BOLD)
-            }
-
-            val durationStr = if (item.duration > 0) {
-                val min = item.duration / 60
-                val sec = item.duration % 60
-                String.format("%d:%02d", min, sec)
+        // WebView-এর নিজস্ব প্লেয়ার বন্ধ করে ফিডে ফেরত আনা
+        view?.evaluateJavascript(
+            "document.querySelectorAll('video').forEach(function(v){v.pause();v.muted=true;v.removeAttribute('src');v.load();});",
+            null
+        )
+        if (fromSpa) {
+            if (view?.canGoBack() == true) {
+                view.goBack()
             } else {
-                "LIVE"
+                view?.loadUrl("https://m.youtube.com")
             }
-
-            val metaView = TextView(this).apply {
-                text = "${item.uploaderName ?: "Unknown"}  •  $durationStr"
-                setTextColor(Color.LTGRAY)
-                textSize = 12f
-                setPadding(0, 8, 0, 0)
-            }
-
-            card.addView(titleView)
-            card.addView(metaView)
-            resultsContainer.addView(card)
         }
+
+        playYouTubeVideo("https://www.youtube.com/watch?v=$videoId")
+    }
+
+    private fun injectFeedAdHideCss(view: WebView?) {
+        val js = """
+            (function() {
+                if (document.getElementById('__yt_feed_hide')) return;
+                if (!document.head) return;
+                var s = document.createElement('style');
+                s.id = '__yt_feed_hide';
+                s.innerHTML = 'ytm-ad-slot-renderer, ytm-in-feed-ad-layout-renderer, ytm-promoted-sparkles-web-renderer, ytm-promoted-video-renderer, ad-slot-renderer { display: none !important; }';
+                document.head.appendChild(s);
+            })();
+        """.trimIndent()
+        view?.evaluateJavascript(js, null)
     }
 
     @OptIn(UnstableApi::class)
-    private fun playYouTubeVideo(videoUrl: String, title: String) {
-        statusText.text = "Loading stream: $title ..."
+    private fun playYouTubeVideo(watchUrl: String) {
+        playerSection.visibility = View.VISIBLE
+        statusText.text = "Loading video (Ad-Free)..."
+        qualityBtn.text = "Quality"
 
         executor.execute {
             try {
-                val info = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
-
-                // সেরা Video-Only ও Audio স্ট্রিম বেছে নেওয়া (720p/1080p সাপোর্টের জন্য)
-                val bestVideoOnly = info.videoOnlyStreams
-                    .filter { it.isUrl }
-                    .firstOrNull { it.resolution.contains("720") || it.resolution.contains("480") }
-                    ?: info.videoOnlyStreams.firstOrNull { it.isUrl }
-
-                val bestAudio = info.audioStreams
+                val info = StreamInfo.getInfo(ServiceList.YouTube, watchUrl)
+                val bestAudio: AudioStream? = info.audioStreams
                     .filter { it.isUrl }
                     .maxByOrNull { it.averageBitrate }
 
-                val bestMuxed = info.videoStreams.firstOrNull { it.isUrl }
+                val options = mutableListOf<VideoQualityOption>()
 
-                val dataSourceFactory = DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
+                // Adaptive Video + Audio (1080p, 720p, 480p, 360p...)
+                if (bestAudio != null) {
+                    val seenHeights = HashSet<Int>()
+                    val sortedVideoOnly = info.videoOnlyStreams
+                        .filter { it.isUrl }
+                        .sortedByDescending { parseHeight(it.resolution) }
 
-                val mediaSource: MediaSource? = when {
-                    bestVideoOnly != null && bestAudio != null -> {
-                        val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(bestVideoOnly.content))
-                        val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(bestAudio.content))
-                        MergingMediaSource(videoSource, audioSource)
+                    for (vs in sortedVideoOnly) {
+                        val h = parseHeight(vs.resolution)
+                        if (h > 0 && seenHeights.add(h)) {
+                            options.add(
+                                VideoQualityOption(
+                                    label = "${h}p",
+                                    height = h,
+                                    videoUrl = vs.content,
+                                    audioUrl = bestAudio.content
+                                )
+                            )
+                        }
                     }
-                    bestMuxed != null -> {
-                        ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(bestMuxed.content))
-                    }
-                    !info.hlsUrl.isNullOrEmpty() -> {
-                        HlsMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(info.hlsUrl))
-                    }
-                    else -> null
                 }
 
+                // Muxed fallback (সাধারণত 360p)
+                for (ms in info.videoStreams.filter { it.isUrl }) {
+                    val h = parseHeight(ms.resolution)
+                    val label = if (h > 0) "${h}p (Muxed)" else ms.resolution
+                    if (options.none { it.height == h }) {
+                        options.add(
+                            VideoQualityOption(
+                                label = label,
+                                height = h,
+                                videoUrl = ms.content,
+                                audioUrl = null
+                            )
+                        )
+                    }
+                }
+
+                // Live / HLS fallback
+                if (!info.hlsUrl.isNullOrEmpty()) {
+                    options.add(
+                        VideoQualityOption(
+                            label = "Auto (HLS)",
+                            height = 0,
+                            videoUrl = info.hlsUrl,
+                            audioUrl = null,
+                            isHls = true
+                        )
+                    )
+                }
+
+                val defaultOption = options.firstOrNull { it.height == 720 }
+                    ?: options.firstOrNull { it.height == 480 }
+                    ?: options.firstOrNull()
+
                 runOnUiThread {
-                    if (mediaSource != null) {
-                        statusText.text = "Playing (Ad-Free): $title"
-                        player?.apply {
-                            setMediaSource(mediaSource)
-                            prepare()
-                            playWhenReady = true
-                        }
+                    availableQualities = options
+                    if (defaultOption != null) {
+                        statusText.text = info.name
+                        startOptionInPlayer(defaultOption, resumePositionMs = 0L)
                     } else {
-                        statusText.text = "এই ভিডিওর স্ট্রিম পাওয়া যায়নি।"
+                        statusText.text = "ভিডিও স্ট্রিম পাওয়া যায়নি"
                     }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    statusText.text = "Play error: ${e.localizedMessage}"
+                    statusText.text = "Error: ${e.localizedMessage}"
                 }
             }
+        }
+    }
+
+    private fun parseHeight(resolution: String?): Int {
+        if (resolution.isNullOrBlank()) return 0
+        val digits = Regex("(\\d+)").find(resolution)?.groupValues?.get(1)
+        return digits?.toIntOrNull() ?: 0
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun startOptionInPlayer(option: VideoQualityOption, resumePositionMs: Long) {
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
+
+        val mediaSource: MediaSource = if (option.isHls) {
+            HlsMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(option.videoUrl))
+        } else if (option.audioUrl != null) {
+            val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(option.videoUrl))
+            val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(option.audioUrl))
+            MergingMediaSource(videoSource, audioSource)
+        } else {
+            ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(option.videoUrl))
+        }
+
+        currentQualityLabel = option.label
+        qualityBtn.text = option.label
+
+        player?.apply {
+            setMediaSource(mediaSource)
+            prepare()
+            if (resumePositionMs > 0L) seekTo(resumePositionMs)
+            setPlaybackSpeed(currentSpeed)
+            playWhenReady = true
+        }
+    }
+
+    private fun showQualityDialog() {
+        if (availableQualities.isEmpty()) return
+        val labels = availableQualities.map { it.label }.toTypedArray()
+        val checked = availableQualities.indexOfFirst { it.label == currentQualityLabel }
+
+        AlertDialog.Builder(this)
+            .setTitle("Select Video Quality")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                val selected = availableQualities[which]
+                val pos = player?.currentPosition ?: 0L
+                startOptionInPlayer(selected, resumePositionMs = pos)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showSpeedDialog() {
+        val speeds = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+        val labels = arrayOf("0.5x", "0.75x", "1.0x (Normal)", "1.25x", "1.5x", "2.0x")
+        val checked = speeds.indexOfFirst { it == currentSpeed }
+
+        AlertDialog.Builder(this)
+            .setTitle("Playback Speed")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                currentSpeed = speeds[which]
+                speedBtn.text = "${currentSpeed}x"
+                player?.setPlaybackSpeed(currentSpeed)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun toggleFullscreen(enter: Boolean) {
+        isFullscreen = enter
+        if (enter) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            webView.visibility = View.GONE
+            controlBar.visibility = View.GONE
+            playerView.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            playerSection.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setSystemUiHidden(true)
+        } else {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            val normalHeight = (resources.displayMetrics.widthPixels.coerceAtMost(
+                resources.displayMetrics.heightPixels
+            ) * 9) / 16
+            playerSection.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            playerView.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                normalHeight
+            )
+            controlBar.visibility = View.VISIBLE
+            webView.visibility = View.VISIBLE
+            setSystemUiHidden(false)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun setSystemUiHidden(hide: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = window.insetsController ?: return
+            if (hide) {
+                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                controller.systemBarsBehavior =
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+            }
+        } else {
+            window.decorView.systemUiVisibility = if (hide) {
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            } else {
+                View.SYSTEM_UI_FLAG_VISIBLE
+            }
+        }
+    }
+
+    private fun closePlayer() {
+        if (isFullscreen) toggleFullscreen(false)
+        player?.stop()
+        playerSection.visibility = View.GONE
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (isFullscreen) {
+            toggleFullscreen(false)
+        } else if (webView.canGoBack()) {
+            webView.goBack()
+        } else if (playerSection.visibility == View.VISIBLE) {
+            closePlayer()
+        } else {
+            super.onBackPressed()
         }
     }
 
