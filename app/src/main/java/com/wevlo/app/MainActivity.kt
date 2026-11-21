@@ -1,368 +1,235 @@
 package com.wevlo.app
 
-import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
-import android.net.VpnService
-import android.os.Build
+import android.graphics.Color
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
-import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.TextView
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
+import java.io.ByteArrayInputStream
 
 class MainActivity : Activity() {
 
-    private lateinit var statusText: TextView
+    private lateinit var webView: WebView
+    private lateinit var rootContainer: FrameLayout
+    private var customView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
 
-    companion object {
-        private const val VPN_REQUEST_CODE = 100
-        private const val NOTIF_REQUEST_CODE = 101
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIF_REQUEST_CODE)
-            }
-        }
-
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(48, 48, 48, 48)
-        }
-
-        statusText = TextView(this).apply {
-            text = "Status: Stopped"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 40)
-        }
-
-        val startBtn = Button(this).apply {
-            text = "Start AdBlocker VPN"
-            setOnClickListener {
-                val intent = VpnService.prepare(this@MainActivity)
-                if (intent != null) {
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(intent, VPN_REQUEST_CODE)
-                } else {
-                    startAdBlockerService()
-                }
-            }
-        }
-
-        val stopBtn = Button(this).apply {
-            text = "Stop AdBlocker VPN"
-            setOnClickListener {
-                val intent = Intent(this@MainActivity, AdBlockVpnService::class.java).apply {
-                    action = AdBlockVpnService.ACTION_STOP
-                }
-                startService(intent)
-                statusText.text = "Status: Stopped"
-            }
-        }
-
-        layout.addView(statusText)
-        layout.addView(startBtn)
-        layout.addView(stopBtn)
-        setContentView(layout)
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK) {
-            startAdBlockerService()
-        }
-    }
-
-    private fun startAdBlockerService() {
-        val intent = Intent(this, AdBlockVpnService::class.java).apply {
-            action = AdBlockVpnService.ACTION_START
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-        statusText.text = "Status: Running"
-    }
-}
-
-class AdBlockVpnService : VpnService() {
-
-    private var vpnInterface: ParcelFileDescriptor? = null
-
-    @Volatile
-    private var isRunning = false
-    private var vpnThread: Thread? = null
-
-    private val blockedDomains = setOf(
+    private val adUrlKeywords = listOf(
         "doubleclick.net",
         "googlesyndication.com",
         "googleadservices.com",
         "adservice.google.com",
-        "pagead2.googlesyndication.com",
-        "ads.youtube.com",
+        "youtube.com/pagead",
+        "youtube.com/api/stats/ads",
+        "youtube.com/get_midroll",
+        "youtube.com/ptracking",
         "an.facebook.com",
-        "pixel.facebook.com",
-        "unityads.unity3d.com",
-        "applovin.com"
+        "pixel.facebook.com"
     )
 
-    companion object {
-        const val ACTION_START = "START_VPN"
-        const val ACTION_STOP = "STOP_VPN"
-        private const val CHANNEL_ID = "adblock_vpn_channel"
-        private const val NOTIFICATION_ID = 101
-    }
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopVpn()
-            return START_NOT_STICKY
-        }
-        startForegroundServiceNotification()
-        startVpn()
-        return START_STICKY
-    }
+        rootContainer = FrameLayout(this)
 
-    private fun startForegroundServiceNotification() {
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "AdBlocker VPN",
-                NotificationManager.IMPORTANCE_LOW
+        val mainLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-            Notification.Builder(this, CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
         }
 
-        val notification = builder
-            .setContentTitle("AdBlocker Active")
-            .setContentText("DNS Ad-Blocking চলছে...")
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setOngoing(true)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        // উপরের নেভিগেশন বার
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#202124"))
+            setPadding(16, 16, 16, 16)
         }
-    }
 
-    private fun startVpn() {
-        if (isRunning) return
+        val ytBtn = Button(this).apply {
+            text = "YouTube"
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            setOnClickListener { webView.loadUrl("https://m.youtube.com") }
+        }
 
-        val builder = Builder()
-            .setSession("SimpleAdBlocker")
-            .addAddress("10.0.0.2", 32)
-            .addDnsServer("10.0.0.1")
-            .addRoute("10.0.0.1", 32)
-            .addDisallowedApplication(packageName)
+        val fbBtn = Button(this).apply {
+            text = "Facebook"
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            setOnClickListener { webView.loadUrl("https://m.facebook.com") }
+        }
 
-        vpnInterface = builder.establish() ?: return
-        isRunning = true
-
-        vpnThread = Thread {
-            runDnsTunnel(vpnInterface!!)
-        }.apply { start() }
-    }
-
-    private fun runDnsTunnel(tunFd: ParcelFileDescriptor) {
-        val input = FileInputStream(tunFd.fileDescriptor)
-        val output = FileOutputStream(tunFd.fileDescriptor)
-        val buffer = ByteArray(32767)
-
-        while (isRunning) {
-            try {
-                val length = input.read(buffer)
-                if (length <= 0) continue
-
-                val version = (buffer[0].toInt() ushr 4) and 0x0F
-                if (version != 4) continue
-
-                val ihl = (buffer[0].toInt() and 0x0F) * 4
-                if (length < ihl + 8) continue
-
-                val protocol = buffer[9].toInt() and 0xFF
-                if (protocol != 17) continue
-
-                val dstPort = ((buffer[ihl + 2].toInt() and 0xFF) shl 8) or
-                    (buffer[ihl + 3].toInt() and 0xFF)
-                if (dstPort != 53) continue
-
-                val dnsOffset = ihl + 8
-                if (length - dnsOffset < 12) continue
-
-                val dnsQuery = buffer.copyOfRange(dnsOffset, length)
-                val parsed = parseDomainName(dnsQuery) ?: continue
-                val (domain, questionEnd) = parsed
-
-                val dnsResponse: ByteArray? = if (isDomainBlocked(domain)) {
-                    buildNxDomainResponse(dnsQuery, questionEnd)
-                } else {
-                    forwardDnsToUpstream(dnsQuery)
-                }
-
-                if (dnsResponse != null) {
-                    val replyPacket = buildUdpIpv4Response(buffer, ihl, dnsResponse)
-                    output.write(replyPacket)
-                }
-            } catch (_: Exception) {
-                if (!isRunning) break
+        val backBtn = Button(this).apply {
+            text = "Back"
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f)
+            setOnClickListener {
+                if (webView.canGoBack()) webView.goBack()
             }
         }
-    }
 
-    private fun isDomainBlocked(domain: String): Boolean {
-        return blockedDomains.any { blocked ->
-            domain == blocked || domain.endsWith(".$blocked")
-        }
-    }
+        topBar.addView(ytBtn)
+        topBar.addView(fbBtn)
+        topBar.addView(backBtn)
 
-    private fun parseDomainName(dns: ByteArray): Pair<String, Int>? {
-        val sb = StringBuilder()
-        var pos = 12
-        while (pos < dns.size) {
-            val len = dns[pos].toInt() and 0xFF
-            pos++
-            if (len == 0) {
-                val qEnd = minOf(pos + 4, dns.size)
-                return sb.toString().lowercase() to qEnd
+        webView = WebView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                mediaPlaybackRequiresUserGesture = false
             }
-            if ((len and 0xC0) == 0xC0 || pos + len > dns.size) return null
-            if (sb.isNotEmpty()) sb.append('.')
-            sb.append(String(dns, pos, len, Charsets.US_ASCII))
-            pos += len
+
+            CookieManager.getInstance().apply {
+                setAcceptCookie(true)
+                setAcceptThirdPartyCookies(this@apply, true)
+            }
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val url = request?.url?.toString()?.lowercase() ?: return null
+                    if (adUrlKeywords.any { url.contains(it) }) {
+                        return WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    injectAdBlockerJs(view)
+                }
+            }
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                    if (customView != null) {
+                        callback?.onCustomViewHidden()
+                        return
+                    }
+                    customView = view
+                    customViewCallback = callback
+                    rootContainer.addView(
+                        view,
+                        FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    )
+                }
+
+                override fun onHideCustomView() {
+                    customView?.let { rootContainer.removeView(it) }
+                    customView = null
+                    customViewCallback?.onCustomViewHidden()
+                    customViewCallback = null
+                }
+            }
         }
-        return null
+
+        mainLayout.addView(topBar)
+        mainLayout.addView(webView)
+        rootContainer.addView(mainLayout)
+        setContentView(rootContainer)
+
+        webView.loadUrl("https://m.youtube.com")
     }
 
-    private fun buildNxDomainResponse(dnsQuery: ByteArray, questionEnd: Int): ByteArray {
-        val resp = dnsQuery.copyOfRange(0, questionEnd)
-        resp[2] = (0x80 or (dnsQuery[2].toInt() and 0x79)).toByte()
-        resp[3] = 0x83.toByte()
-        resp[6] = 0; resp[7] = 0
-        resp[8] = 0; resp[9] = 0
-        resp[10] = 0; resp[11] = 0
-        return resp
+    private fun injectAdBlockerJs(view: WebView?) {
+        val js = """
+            (function() {
+                if (window.__adBlockInjected) return;
+                window.__adBlockInjected = true;
+
+                // ব্যানার ও প্রমোটেড অ্যাড লুকানোর CSS
+                var style = document.createElement('style');
+                style.innerHTML = `
+                    ytm-promoted-sparkles-web-renderer,
+                    ytm-promoted-video-renderer,
+                    ytm-companion-slot-renderer,
+                    ad-slot-renderer,
+                    .ytp-ad-overlay-container,
+                    .ytp-ad-message-container {
+                        display: none !important;
+                    }
+                `;
+                document.head.appendChild(style);
+
+                // ভিডিও অ্যাড অটো-স্কিপ ও ফেসবুক Sponsored পোস্ট হাইড
+                setInterval(function() {
+                    // YouTube Ad Handling
+                    var player = document.querySelector('#movie_player, .html5-video-player');
+                    var video = document.querySelector('video');
+                    if (player && video) {
+                        var isAd = player.classList.contains('ad-showing') ||
+                                   player.classList.contains('ad-interrupting');
+                        if (isAd) {
+                            if (!window.__ytAdMuted) {
+                                window.__prevMuted = video.muted;
+                                window.__ytAdMuted = true;
+                            }
+                            video.muted = true;
+                            video.playbackRate = 16.0;
+                            if (isFinite(video.duration) && video.duration > 0) {
+                                video.currentTime = video.duration;
+                            }
+                            var skipBtn = document.querySelector(
+                                '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern'
+                            );
+                            if (skipBtn) skipBtn.click();
+                        } else if (window.__ytAdMuted) {
+                            video.muted = !!window.__prevMuted;
+                            video.playbackRate = 1.0;
+                            window.__ytAdMuted = false;
+                        }
+                    }
+
+                    // Facebook Sponsored Post Hiding (Mobile Web)
+                    if (location.hostname.includes('facebook.com')) {
+                        var spans = document.querySelectorAll('span, a');
+                        for (var i = 0; i < spans.length; i++) {
+                            if (spans[i].textContent && spans[i].textContent.trim() === 'Sponsored') {
+                                var post = spans[i].closest('article, [data-tracking-duration-id]');
+                                if (post) post.style.display = 'none';
+                            }
+                        }
+                    }
+                }, 400);
+            })();
+        """.trimIndent()
+
+        view?.evaluateJavascript(js, null)
     }
 
-    private fun forwardDnsToUpstream(dnsQuery: ByteArray): ByteArray? {
-        var socket: DatagramSocket? = null
-        return try {
-            socket = DatagramSocket()
-            protect(socket)
-            socket.soTimeout = 3000
-
-            val upstreamAddr = InetAddress.getByName("8.8.8.8")
-            val outPacket = DatagramPacket(dnsQuery, dnsQuery.size, upstreamAddr, 53)
-            socket.send(outPacket)
-
-            val respBuf = ByteArray(4096)
-            val inPacket = DatagramPacket(respBuf, respBuf.size)
-            socket.receive(inPacket)
-
-            respBuf.copyOfRange(0, inPacket.length)
-        } catch (_: Exception) {
-            null
-        } finally {
-            socket?.close()
-        }
-    }
-
-    private fun buildUdpIpv4Response(
-        reqPacket: ByteArray,
-        reqIhl: Int,
-        dnsResponse: ByteArray
-    ): ByteArray {
-        val udpLen = 8 + dnsResponse.size
-        val totalLen = 20 + udpLen
-        val resp = ByteArray(totalLen)
-
-        resp[0] = 0x45.toByte()
-        resp[1] = 0x00
-        resp[2] = (totalLen shr 8).toByte()
-        resp[3] = (totalLen and 0xFF).toByte()
-        resp[6] = 0x40
-        resp[8] = 64
-        resp[9] = 17
-
-        System.arraycopy(reqPacket, 16, resp, 12, 4)
-        System.arraycopy(reqPacket, 12, resp, 16, 4)
-
-        val ipChecksum = calculateIpChecksum(resp, 20)
-        resp[10] = (ipChecksum shr 8).toByte()
-        resp[11] = (ipChecksum and 0xFF).toByte()
-
-        System.arraycopy(reqPacket, reqIhl + 2, resp, 20, 2)
-        System.arraycopy(reqPacket, reqIhl, resp, 22, 2)
-        resp[24] = (udpLen shr 8).toByte()
-        resp[25] = (udpLen and 0xFF).toByte()
-        resp[26] = 0; resp[27] = 0
-
-        System.arraycopy(dnsResponse, 0, resp, 28, dnsResponse.size)
-        return resp
-    }
-
-    private fun calculateIpChecksum(buf: ByteArray, length: Int): Int {
-        var sum = 0
-        var i = 0
-        while (i < length) {
-            val high = buf[i].toInt() and 0xFF
-            val low = if (i + 1 < length) buf[i + 1].toInt() and 0xFF else 0
-            sum += (high shl 8) or low
-            i += 2
-        }
-        while ((sum ushr 16) != 0) {
-            sum = (sum and 0xFFFF) + (sum ushr 16)
-        }
-        return sum.inv() and 0xFFFF
-    }
-
-    private fun stopVpn() {
-        isRunning = false
-        vpnThread?.interrupt()
-        try {
-            vpnInterface?.close()
-        } catch (_: Exception) {
-        }
-        vpnInterface = null
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (customView != null) {
+            webView.webChromeClient?.onHideCustomView()
+        } else if (webView.canGoBack()) {
+            webView.goBack()
         } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
+            super.onBackPressed()
         }
-        stopSelf()
-    }
-
-    override fun onDestroy() {
-        stopVpn()
-        super.onDestroy()
     }
 }
