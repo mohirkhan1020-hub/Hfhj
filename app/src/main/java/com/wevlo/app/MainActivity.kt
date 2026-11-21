@@ -51,7 +51,6 @@ class MainActivity : Activity() {
             )
         }
 
-        // উপরের নেভিগেশন বার
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor("#202124"))
@@ -95,10 +94,9 @@ class MainActivity : Activity() {
                 mediaPlaybackRequiresUserGesture = false
             }
 
-            CookieManager.getInstance().apply {
-                setAcceptCookie(true)
-                setAcceptThirdPartyCookies(this@apply, true)
-            }
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(this, true)
 
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(
@@ -162,7 +160,6 @@ class MainActivity : Activity() {
                 if (window.__adBlockInjected) return;
                 window.__adBlockInjected = true;
 
-                // ব্যানার ও প্রমোটেড অ্যাড লুকানোর CSS
                 var style = document.createElement('style');
                 style.innerHTML = `
                     ytm-promoted-sparkles-web-renderer,
@@ -176,9 +173,7 @@ class MainActivity : Activity() {
                 `;
                 document.head.appendChild(style);
 
-                // ভিডিও অ্যাড অটো-স্কিপ ও ফেসবুক Sponsored পোস্ট হাইড
                 setInterval(function() {
-                    // YouTube Ad Handling
                     var player = document.querySelector('#movie_player, .html5-video-player');
                     var video = document.querySelector('video');
                     if (player && video) {
@@ -205,7 +200,6 @@ class MainActivity : Activity() {
                         }
                     }
 
-                    // Facebook Sponsored Post Hiding (Mobile Web)
                     if (location.hostname.includes('facebook.com')) {
                         var spans = document.querySelectorAll('span, a');
                         for (var i = 0; i < spans.length; i++) {
