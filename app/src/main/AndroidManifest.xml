@@ -10,7 +10,7 @@
         android:allowBackup="true"
         android:label="SimpleAdBlocker"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@android:style/Theme.Material.Light.DarkActionBar">
 
         <activity
             android:name=".MainActivity"
