@@ -2,55 +2,109 @@ package com.wevlo.app
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.app.AlertDialog
-import android.app.DownloadManager
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.PictureInPictureParams
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
-import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
 import android.util.Rational
 import android.view.GestureDetector
-import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.TextView
 import android.widget.Toast
-import androidx.media3.common.AudioAttributes
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ClosedCaption
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material.icons.rounded.ThumbUp
+import androidx.compose.material.icons.rounded.ZoomOutMap
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -63,167 +117,97 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import okhttp3.OkHttpClient
-import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
+import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
-import org.schabi.newpipe.extractor.NewPipe
-import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
-import org.schabi.newpipe.extractor.stream.AudioStream
-import org.schabi.newpipe.extractor.stream.StreamInfo
-import java.io.ByteArrayInputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
-data class VideoQualityOption(
-    val label: String,
-    val height: Int,
-    val videoUrl: String,
-    val audioUrl: String?,
-    val isHls: Boolean = false
-)
+private val BgDark = Color(0xFF0B0B0F)
+private val SurfaceDark = Color(0xFF14141C)
+private val CardDark = Color(0xFF1C1C26)
+private val ChipBorder = Color(0xFF2E2E3E)
+private val AccentRed = Color(0xFFFF2E4C)
+private val AccentGreen = Color(0xFF4ADE80)
+private val AccentBlue = Color(0xFF60A5FA)
+private val TextSecondary = Color(0xFFA1A1B5)
 
-data class SponsorSegment(
-    val startMs: Long,
-    val endMs: Long,
-    val category: String
-)
+class MainActivity : ComponentActivity() {
 
-class MainActivity : Activity() {
+    private val executor = Executors.newFixedThreadPool(4)
+    private var playerViewRef: PlayerView? = null
 
-    private lateinit var topMenuBar: LinearLayout
-    private lateinit var shortsToggleBtn: TextView
-    private lateinit var playerSection: LinearLayout
-    private lateinit var playerFrame: FrameLayout
-    private lateinit var playerView: PlayerView
-    private lateinit var loadingSpinner: ProgressBar
-    private lateinit var gestureBadge: TextView
-    private lateinit var unlockBtn: TextView
-    private lateinit var controlBar1: LinearLayout
-    private lateinit var actionScrollBar: HorizontalScrollView
-    private lateinit var statusText: TextView
-    private lateinit var channelText: TextView
-    private lateinit var statsText: TextView
-    private lateinit var qualityBtn: TextView
-    private lateinit var speedBtn: TextView
-    private lateinit var loopBtn: TextView
-    private lateinit var zoomBtn: TextView
-    private lateinit var bgPlayBtn: TextView
-    private lateinit var lockBtn: TextView
-    private lateinit var webView: WebView
+    private var selectedTab by mutableIntStateOf(0)
+    private var selectedCategory by mutableStateOf("Popular")
+    private var searchQuery by mutableStateOf("")
+    private var homeVideos by mutableStateOf<List<VideoItemUi>>(emptyList())
+    private var searchVideos by mutableStateOf<List<VideoItemUi>>(emptyList())
+    private var historyVideos by mutableStateOf<List<VideoItemUi>>(emptyList())
+    private var isLoadingFeed by mutableStateOf(false)
+    private var feedError by mutableStateOf<String?>(null)
 
-    private val executor = Executors.newFixedThreadPool(3)
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private var isPlayerVisible by mutableStateOf(false)
+    private var isPlayingNow by mutableStateOf(false)
+    private var isLoadingStream by mutableStateOf(false)
+    private var activeVideoId by mutableStateOf<String?>(null)
+    private var activeTitle by mutableStateOf("WevloTube")
+    private var activeChannel by mutableStateOf("")
+    private var activeAvatarUrl by mutableStateOf<String?>(null)
+    private var activeViewsText by mutableStateOf("")
+    private var activeDescription by mutableStateOf("")
+    private var activeVotesText by mutableStateOf<String?>(null)
+    private var activeDislikesText by mutableStateOf<String?>(null)
+    private var sponsorCount by mutableIntStateOf(0)
+    private var relatedVideos by mutableStateOf<List<VideoItemUi>>(emptyList())
 
-    private var availableQualities: List<VideoQualityOption> = emptyList()
-    private var currentQualityLabel = "Auto"
-    private var currentSpeed = 1.0f
-    private var isFullscreen = false
-    private var isLooping = false
-    private var isZoomed = false
-    private var isTouchLocked = false
-    private var bgPlayEnabled = true
-    private var blockShortsEnabled = false
+    private var availableQualities by mutableStateOf<List<VideoQualityOption>>(emptyList())
+    private var currentQualityLabel by mutableStateOf("Auto")
+    private var currentSpeed by mutableFloatStateOf(1.0f)
+    private var isFullscreen by mutableStateOf(false)
+    private var isPipMode by mutableStateOf(false)
+    private var isTouchLocked by mutableStateOf(false)
+    private var isLooping by mutableStateOf(false)
+    private var isZoomed by mutableStateOf(false)
+    private var autoPlayNext by mutableStateOf(true)
+    private var bgPlayEnabled by mutableStateOf(true)
+    private var showDescription by mutableStateOf(false)
 
-    private var currentVideoTitle: String = "WevloTube"
-    private var bestMuxedDownloadUrl: String? = null
-    private var bestAudioDownloadUrl: String? = null
+    private var availableSubtitles by mutableStateOf<List<SubtitleOption>>(emptyList())
+    private var currentSubtitleLabel by mutableStateOf("Off")
+    private var activeCues by mutableStateOf<List<SubtitleCue>>(emptyList())
+    private var currentSubtitleText by mutableStateOf("")
+
+    private var bestHdVideoUrl by mutableStateOf<String?>(null)
+    private var bestHdLabel by mutableStateOf("1080p")
+    private var bestMuxedUrl by mutableStateOf<String?>(null)
+    private var bestAudioM4aUrl by mutableStateOf<String?>(null)
+    private var downloadStatusText by mutableStateOf<String?>(null)
+
+    private var showQualityDialog by mutableStateOf(false)
+    private var showSpeedDialog by mutableStateOf(false)
+    private var showSubtitleDialog by mutableStateOf(false)
+    private var showDownloadDialog by mutableStateOf(false)
+    private var gestureText by mutableStateOf<String?>(null)
+    private var gestureTriggerTime by mutableStateOf(0L)
 
     @Volatile
     private var sponsorSegments: List<SponsorSegment> = emptyList()
     private var lastSkippedEndMs: Long = -1L
-
-    private var lastVideoId: String? = null
-    private var lastVideoTime: Long = 0L
-
     private var brightnessRatio = 0.5f
     private var volumeRatio = 0.5f
 
-    private val adUrlKeywords = listOf(
-        "doubleclick.net",
-        "googlesyndication.com",
-        "googleadservices.com",
-        "adservice.google.com",
-        "youtube.com/pagead",
-        "youtube.com/api/stats/ads",
-        "youtube.com/get_midroll",
-        "youtube.com/ptracking"
-    )
+    private val categories = listOf("Popular", "Music", "Gaming", "Tech", "Bangla", "News", "Sports")
 
-    private val sponsorCheckRunnable = object : Runnable {
-        override fun run() {
-            val p = BgPlaybackService.player
-            if (p != null && p.isPlaying) {
-                val pos = p.currentPosition
-                for (seg in sponsorSegments) {
-                    if (pos in seg.startMs until (seg.endMs - 400) && lastSkippedEndMs != seg.endMs) {
-                        lastSkippedEndMs = seg.endMs
-                        p.seekTo(seg.endMs)
-                        showGestureBadge("⏭ Skipped ${seg.category}")
-                        break
-                    }
-                }
-            }
-            mainHandler.postDelayed(this, 500)
-        }
-    }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private fun roundedBg(fillHex: String, radiusDp: Int, strokeHex: String? = null): GradientDrawable {
-        return GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(radiusDp).toFloat()
-            setColor(Color.parseColor(fillHex))
-            if (strokeHex != null) {
-                setStroke(dp(1), Color.parseColor(strokeHex))
-            }
-        }
-    }
-
-    private fun makePill(
-        label: String,
-        bgHex: String = "#23232E",
-        textHex: String = "#FFFFFF",
-        strokeHex: String = "#353545",
-        onClick: () -> Unit
-    ): TextView {
-        return TextView(this).apply {
-            text = label
-            setTextColor(Color.parseColor(textHex))
-            textSize = 12f
-            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            background = roundedBg(bgHex, 20, strokeHex)
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(0, 0, dp(8), 0)
-            }
-            setOnClickListener { onClick() }
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
-    @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.statusBarColor = Color.parseColor("#0B0B0F")
-        window.navigationBarColor = Color.parseColor("#0B0B0F")
+        window.statusBarColor = 0xFF0B0B0F.toInt()
+        window.navigationBarColor = 0xFF0B0B0F.toInt()
 
-        NewPipe.init(OkHttpDownloader.getInstance())
-        BgPlaybackService.ensurePlayer(applicationContext)
+        YouTubeBackend.init()
+        val player = BgPlaybackService.ensurePlayer(applicationContext)
+        isPlayingNow = player.isPlaying
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -235,475 +219,49 @@ class MainActivity : Activity() {
         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         volumeRatio = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / maxVol
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0B0B0F"))
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+        addOnPictureInPictureModeChangedListener { info ->
+            isPipMode = info.isInPictureInPictureMode
+            playerViewRef?.useController = !info.isInPictureInPictureMode && !isTouchLocked
         }
 
-        // ১. আধুনিক ব্র্যান্ড হেডার বার
-        topMenuBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#121218"))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+        BgPlaybackService.onIsPlayingChanged = { playing ->
+            runOnUiThread { isPlayingNow = playing }
         }
 
-        val logoBadge = TextView(this).apply {
-            text = "▶"
-            setTextColor(Color.WHITE)
-            textSize = 13f
-            gravity = Gravity.CENTER
-            background = roundedBg("#FF2E4C", 8)
-            setPadding(dp(9), dp(4), dp(9), dp(4))
-        }
-
-        val brandTitle = TextView(this).apply {
-            text = "WevloTube"
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
-            setPadding(dp(8), 0, dp(6), 0)
-        }
-
-        val adFreeTag = TextView(this).apply {
-            text = "NO ADS"
-            setTextColor(Color.parseColor("#4ADE80"))
-            textSize = 9f
-            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
-            background = roundedBg("#162E21", 10, "#22543D")
-            setPadding(dp(6), dp(2), dp(6), dp(2))
-        }
-
-        val spacer = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
-        }
-
-        val homeBtn = makePill("🏠 Home", "#1E1E28", "#E4E4EB", "#2F2F3D") {
-            webView.loadUrl("https://m.youtube.com")
-        }
-
-        val historyBtn = makePill("🕒", "#1E1E28", "#E4E4EB", "#2F2F3D") {
-            showHistoryDialog()
-        }
-
-        shortsToggleBtn = makePill("Shorts: ON", "#1E1E28", "#E4E4EB", "#2F2F3D") {
-            blockShortsEnabled = !blockShortsEnabled
-            shortsToggleBtn.text = if (blockShortsEnabled) "Shorts: OFF" else "Shorts: ON"
-            shortsToggleBtn.background = roundedBg(
-                if (blockShortsEnabled) "#3B1822" else "#1E1E28",
-                20,
-                if (blockShortsEnabled) "#FF2E4C" else "#2F2F3D"
-            )
-            injectYouTubeCss(webView)
-        }.apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        }
-
-        topMenuBar.addView(logoBadge)
-        topMenuBar.addView(brandTitle)
-        topMenuBar.addView(adFreeTag)
-        topMenuBar.addView(spacer)
-        topMenuBar.addView(homeBtn)
-        topMenuBar.addView(historyBtn)
-        topMenuBar.addView(shortsToggleBtn)
-
-        // ২. অ্যাডভান্সড ExoPlayer সেকশন
-        playerSection = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#121218"))
-            visibility = if (BgPlaybackService.player?.currentMediaItem != null) View.VISIBLE else View.GONE
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        }
-
-        val playerHeight = (resources.displayMetrics.widthPixels * 9) / 16
-        playerFrame = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                playerHeight
-            )
-        }
-
-        playerView = PlayerView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-            controllerShowTimeoutMs = 2500
-            setKeepContentOnPlayerReset(true)
-            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-            setShowNextButton(false)
-            setShowPreviousButton(false)
-            setFullscreenButtonClickListener { shouldEnter ->
-                toggleFullscreen(shouldEnter)
-            }
-        }
-
-        loadingSpinner = ProgressBar(this).apply {
-            visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER)
-        }
-
-        gestureBadge = TextView(this).apply {
-            visibility = View.GONE
-            setTextColor(Color.WHITE)
-            background = roundedBg("#CC14141E", 20, "#44FFFFFF")
-            textSize = 14f
-            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
-            setPadding(dp(18), dp(10), dp(18), dp(10))
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER
-            )
-        }
-
-        unlockBtn = TextView(this).apply {
-            visibility = View.GONE
-            text = "🔓 Unlock"
-            setTextColor(Color.WHITE)
-            textSize = 12f
-            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
-            background = roundedBg("#CCFF2E4C", 20)
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP or Gravity.END
-            ).apply {
-                setMargins(0, dp(14), dp(14), 0)
-            }
-            setOnClickListener { setPlayerTouchLocked(false) }
-        }
-
-        playerFrame.addView(playerView)
-        playerFrame.addView(loadingSpinner)
-        playerFrame.addView(gestureBadge)
-        playerFrame.addView(unlockBtn)
-        playerView.player = BgPlaybackService.player
-
-        setupPlayerGestures()
-        setupBackgroundCallbacks()
-
-        // ৩. ভিডিও টাইটেল ও মেটাডেটা কার্ড
-        controlBar1 = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#16161F"))
-            setPadding(dp(14), dp(10), dp(14), dp(8))
-        }
-
-        statusText = TextView(this).apply {
-            text = BgPlaybackService.currentTitle
-            setTextColor(Color.WHITE)
-            textSize = 15f
-            maxLines = 2
-            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
-        }
-
-        channelText = TextView(this).apply {
-            text = ""
-            setTextColor(Color.parseColor("#A1A1B5"))
-            textSize = 12f
-            setPadding(0, dp(3), 0, dp(2))
-        }
-
-        statsText = TextView(this).apply {
-            text = "🛡 Ad-Free  •  SponsorBlock Active"
-            setTextColor(Color.parseColor("#4ADE80"))
-            textSize = 11.5f
-            setPadding(0, dp(2), 0, dp(2))
-        }
-
-        controlBar1.addView(statusText)
-        controlBar1.addView(channelText)
-        controlBar1.addView(statsText)
-
-        // ৪. স্ক্রলযোগ্য আধুনিক প্লেয়ার অ্যাকশন পিল বার
-        actionScrollBar = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            setBackgroundColor(Color.parseColor("#121218"))
-            setPadding(dp(12), dp(6), dp(12), dp(10))
-        }
-
-        val pillRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        qualityBtn = makePill("⚡ Quality", "#242432", "#FFFFFF", "#FF2E4C") { showQualityDialog() }
-        speedBtn = makePill("⏩ 1.0x") { showSpeedDialog() }
-        loopBtn = makePill("🔁 Loop: OFF") { toggleLoopMode() }
-        zoomBtn = makePill("📐 Fit") { toggleZoomMode() }
-        val pipBtn = makePill("🖼 PiP") { enterPipMode() }
-        bgPlayBtn = makePill("🎧 BG: ON", "#182D24", "#4ADE80", "#22543D") {
-            bgPlayEnabled = !bgPlayEnabled
-            bgPlayBtn.text = if (bgPlayEnabled) "🎧 BG: ON" else "🎧 BG: OFF"
-            bgPlayBtn.background = roundedBg(
-                if (bgPlayEnabled) "#182D24" else "#23232E",
-                20,
-                if (bgPlayEnabled) "#22543D" else "#353545"
-            )
-            bgPlayBtn.setTextColor(Color.parseColor(if (bgPlayEnabled) "#4ADE80" else "#FFFFFF"))
-            if (!bgPlayEnabled) {
-                stopService(Intent(this, BgPlaybackService::class.java))
-            } else if (BgPlaybackService.player?.isPlaying == true) {
-                startBgPlaybackService()
-            }
-        }
-        lockBtn = makePill("🔒 Lock") { setPlayerTouchLocked(true) }
-        val saveBtn = makePill("⬇ Save", "#1D263B", "#93C5FD", "#2E4068") { showDownloadDialog() }
-        val closeBtn = makePill("✕ Close", "#321A22", "#FCA5A5", "#5C2636") { closePlayer() }.apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        }
-
-        pillRow.addView(qualityBtn)
-        pillRow.addView(speedBtn)
-        pillRow.addView(loopBtn)
-        pillRow.addView(zoomBtn)
-        pillRow.addView(pipBtn)
-        pillRow.addView(bgPlayBtn)
-        pillRow.addView(lockBtn)
-        pillRow.addView(saveBtn)
-        pillRow.addView(closeBtn)
-        actionScrollBar.addView(pillRow)
-
-        playerSection.addView(playerFrame)
-        playerSection.addView(controlBar1)
-        playerSection.addView(actionScrollBar)
-
-        // ৫. আসল YouTube ফিড (WebView)
-        webView = WebView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-            setBackgroundColor(Color.parseColor("#0B0B0F"))
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                databaseEnabled = true
-                javaScriptCanOpenWindowsAutomatically = false
-                setSupportMultipleWindows(false)
-            }
-
-            val cm = CookieManager.getInstance()
-            cm.setAcceptCookie(true)
-            cm.setAcceptThirdPartyCookies(this, true)
-
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(
-                    view: WebView?,
-                    request: WebResourceRequest?
-                ): Boolean {
-                    val url = request?.url?.toString() ?: return false
-                    val videoId = extractYouTubeVideoId(url)
-                    if (videoId != null) {
-                        if (blockShortsEnabled && url.contains("/shorts/")) {
-                            Toast.makeText(this@MainActivity, "Shorts Blocked", Toast.LENGTH_SHORT).show()
-                            return true
-                        }
-                        handleVideoClick(videoId, view, fromSpa = false)
-                        return true
-                    }
-                    return false
-                }
-
-                override fun doUpdateVisitedHistory(
-                    view: WebView?,
-                    url: String?,
-                    isReload: Boolean
-                ) {
-                    super.doUpdateVisitedHistory(view, url, isReload)
-                    if (url != null) {
-                        val videoId = extractYouTubeVideoId(url)
-                        if (videoId != null) {
-                            if (blockShortsEnabled && url.contains("/shorts/")) {
-                                if (view?.canGoBack() == true) view.goBack()
-                                Toast.makeText(this@MainActivity, "Shorts Blocked", Toast.LENGTH_SHORT).show()
-                                return
-                            }
-                            handleVideoClick(videoId, view, fromSpa = true)
-                        }
-                    }
-                }
-
-                override fun shouldInterceptRequest(
-                    view: WebView?,
-                    request: WebResourceRequest?
-                ): WebResourceResponse? {
-                    val url = request?.url?.toString()?.lowercase() ?: return null
-                    if (adUrlKeywords.any { url.contains(it) }) {
-                        return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
-                    }
-                    return super.shouldInterceptRequest(view, request)
-                }
-
-                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    super.onPageStarted(view, url, favicon)
-                    injectYouTubeCss(view)
-                }
-
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    injectYouTubeCss(view)
-                }
-            }
-        }
-
-        root.addView(topMenuBar)
-        root.addView(playerSection)
-        root.addView(webView)
-        setContentView(root)
-
-        webView.loadUrl("https://m.youtube.com")
-        handleIncomingIntent(intent)
-        mainHandler.postDelayed(sponsorCheckRunnable, 500)
-    }
-
-    private fun setPlayerTouchLocked(locked: Boolean) {
-        isTouchLocked = locked
-        playerView.useController = !locked
-        if (locked) {
-            playerView.hideController()
-            unlockBtn.visibility = View.VISIBLE
-            showGestureBadge("🔒 Touch Locked")
-        } else {
-            unlockBtn.visibility = View.GONE
-            playerView.showController()
-            showGestureBadge("🔓 Unlocked")
-        }
-    }
-
-    private fun toggleLoopMode() {
-        isLooping = !isLooping
-        BgPlaybackService.player?.repeatMode = if (isLooping) {
-            Player.REPEAT_MODE_ONE
-        } else {
-            Player.REPEAT_MODE_OFF
-        }
-        loopBtn.text = if (isLooping) "🔁 Loop: ON" else "🔁 Loop: OFF"
-        loopBtn.background = roundedBg(
-            if (isLooping) "#182D24" else "#23232E",
-            20,
-            if (isLooping) "#22543D" else "#353545"
-        )
-    }
-
-    @OptIn(UnstableApi::class)
-    private fun toggleZoomMode() {
-        isZoomed = !isZoomed
-        playerView.resizeMode = if (isZoomed) {
-            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-        } else {
-            AspectRatioFrameLayout.RESIZE_MODE_FIT
-        }
-        zoomBtn.text = if (isZoomed) "📐 Zoom" else "📐 Fit"
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun setupPlayerGestures() {
-        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val p = BgPlaybackService.player ?: return false
-                if (e.x < playerView.width / 2f) {
-                    p.seekBack()
-                    showGestureBadge("⏪ -10s")
-                } else {
-                    p.seekForward()
-                    showGestureBadge("⏩ +10s")
-                }
-                return true
-            }
-
-            override fun onScroll(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                distanceX: Float,
-                distanceY: Float
-            ): Boolean {
-                if (e1 == null || abs(distanceY) < abs(distanceX)) return false
-                val w = playerView.width.toFloat().coerceAtLeast(1f)
-                val h = playerView.height.toFloat().coerceAtLeast(1f)
-                val delta = distanceY / h
-
-                if (e1.x < w / 2f) {
-                    brightnessRatio = (brightnessRatio + delta).coerceIn(0.05f, 1.0f)
-                    val lp = window.attributes
-                    lp.screenBrightness = brightnessRatio
-                    window.attributes = lp
-                    showGestureBadge("☀ Brightness ${(brightnessRatio * 100).toInt()}%")
-                } else {
-                    val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-                    volumeRatio = (volumeRatio + delta).coerceIn(0.0f, 1.0f)
-                    val newVol = (volumeRatio * maxVol).toInt()
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
-                    showGestureBadge("🔊 Volume ${(volumeRatio * 100).toInt()}%")
-                }
-                return true
-            }
-        })
-
-        playerView.setOnTouchListener { _, event ->
-            if (isTouchLocked) {
-                if (event.action == MotionEvent.ACTION_UP) {
-                    unlockBtn.visibility = View.VISIBLE
-                    showGestureBadge("🔒 Locked — Tap Unlock")
-                }
-                return@setOnTouchListener true
-            }
-            gestureDetector.onTouchEvent(event)
-            false
-        }
-    }
-
-    private fun showGestureBadge(text: String) {
-        gestureBadge.text = text
-        gestureBadge.visibility = View.VISIBLE
-        mainHandler.removeCallbacks(hideBadgeRunnable)
-        mainHandler.postDelayed(hideBadgeRunnable, 900)
-    }
-
-    private val hideBadgeRunnable = Runnable {
-        gestureBadge.visibility = View.GONE
-    }
-
-    private fun setupBackgroundCallbacks() {
         BgPlaybackService.onCloseFromNotification = {
-            mainHandler.post {
-                playerSection.visibility = View.GONE
+            runOnUiThread { isPlayerVisible = false }
+        }
+
+        BgPlaybackService.onPlaybackEnded = {
+            runOnUiThread {
+                if (autoPlayNext && !isLooping && relatedVideos.isNotEmpty()) {
+                    val next = relatedVideos.first()
+                    Toast.makeText(this, "Up Next: ${next.title}", Toast.LENGTH_SHORT).show()
+                    playVideoItem(next)
+                }
+            }
+        }
+
+        loadHistoryFromPrefs()
+        loadFeedForCategory(selectedCategory)
+        handleIncomingIntent(intent)
+
+        setContent {
+            MaterialTheme(
+                colorScheme = darkColorScheme(
+                    primary = AccentRed,
+                    background = BgDark,
+                    surface = SurfaceDark,
+                    onBackground = Color.White,
+                    onSurface = Color.White
+                )
+            ) {
+                WevloTubeApp(player)
             }
         }
     }
 
-    private fun startBgPlaybackService() {
-        val intent = Intent(this, BgPlaybackService::class.java).apply {
-            action = BgPlaybackService.ACTION_START_OR_UPDATE
-            putExtra(BgPlaybackService.EXTRA_TITLE, currentVideoTitle)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingIntent(intent)
@@ -718,261 +276,1087 @@ class MainActivity : Activity() {
         } ?: return
 
         val urlMatch = Regex("https?://\\S+").find(text)?.value ?: text
-        val videoId = extractYouTubeVideoId(urlMatch)
+        val videoId = YouTubeBackend.extractYouTubeVideoId(urlMatch)
         if (videoId != null) {
-            playYouTubeVideo(videoId)
+            playYouTubeById(videoId, "Shared Video", "", null)
         }
     }
 
-    private fun extractYouTubeVideoId(url: String): String? {
-        val uri = Uri.parse(url)
-        val host = uri.host?.lowercase() ?: return null
-        if (!host.contains("youtube.com") && !host.contains("youtu.be")) return null
-
-        if (host.contains("youtu.be")) {
-            return uri.pathSegments.firstOrNull()?.takeIf { it.isNotBlank() }
-        }
-        val vParam = uri.getQueryParameter("v")
-        if (!vParam.isNullOrBlank()) return vParam
-
-        val segments = uri.pathSegments
-        if (segments.size >= 2 &&
-            (segments[0] == "shorts" || segments[0] == "embed" || segments[0] == "live")
-        ) {
-            return segments[1].takeIf { it.isNotBlank() }
-        }
-        return null
-    }
-
-    private fun handleVideoClick(videoId: String, view: WebView?, fromSpa: Boolean) {
-        val now = System.currentTimeMillis()
-        if (videoId == lastVideoId && now - lastVideoTime < 2000L) return
-        lastVideoId = videoId
-        lastVideoTime = now
-
-        view?.evaluateJavascript(
-            "document.querySelectorAll('video').forEach(function(v){v.pause();v.muted=true;v.removeAttribute('src');v.load();});",
-            null
-        )
-        if (fromSpa) {
-            if (view?.canGoBack() == true) {
-                view.goBack()
-            } else {
-                view?.loadUrl("https://m.youtube.com")
+    @Composable
+    private fun WevloTubeApp(player: ExoPlayer) {
+        LaunchedEffect(activeVideoId, activeCues) {
+            while (true) {
+                if (player.isPlaying) {
+                    val pos = player.currentPosition
+                    for (seg in sponsorSegments) {
+                        if (pos in seg.startMs until (seg.endMs - 400) && lastSkippedEndMs != seg.endMs) {
+                            lastSkippedEndMs = seg.endMs
+                            player.seekTo(seg.endMs)
+                            showGesture("Skipped ${seg.category}")
+                            break
+                        }
+                    }
+                    if (activeCues.isNotEmpty()) {
+                        val cue = activeCues.firstOrNull { pos in it.startMs..it.endMs }
+                        currentSubtitleText = cue?.text ?: ""
+                    } else if (currentSubtitleText.isNotEmpty()) {
+                        currentSubtitleText = ""
+                    }
+                }
+                delay(250)
             }
         }
-        playYouTubeVideo(videoId)
-    }
 
-    private fun injectYouTubeCss(view: WebView?) {
-        val shortsCss = if (blockShortsEnabled) {
-            "ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model, [is-shorts] { display: none !important; }"
-        } else {
-            ""
+        LaunchedEffect(gestureTriggerTime) {
+            if (gestureText != null) {
+                delay(950)
+                if (System.currentTimeMillis() - gestureTriggerTime >= 900) {
+                    gestureText = null
+                }
+            }
         }
-        val js = """
-            (function() {
-                if (!document.head) return;
-                var existing = document.getElementById('__yt_feed_hide');
-                if (existing) existing.remove();
-                var s = document.createElement('style');
-                s.id = '__yt_feed_hide';
-                s.innerHTML = 'ytm-ad-slot-renderer, ytm-in-feed-ad-layout-renderer, ytm-promoted-sparkles-web-renderer, ytm-promoted-video-renderer, ad-slot-renderer { display: none !important; } $shortsCss';
-                document.head.appendChild(s);
-            })();
-        """.trimIndent()
-        view?.evaluateJavascript(js, null)
-    }
 
-    @OptIn(UnstableApi::class)
-    private fun playYouTubeVideo(videoId: String) {
-        sponsorSegments = emptyList()
-        lastSkippedEndMs = -1L
-        bestMuxedDownloadUrl = null
-        bestAudioDownloadUrl = null
+        BackHandler {
+            when {
+                isTouchLocked -> showGesture("Locked — Tap Unlock")
+                isFullscreen -> toggleFullscreen(false)
+                isPlayerVisible -> isPlayerVisible = false
+                selectedTab != 0 -> selectedTab = 0
+                else -> finish()
+            }
+        }
 
-        playerSection.visibility = View.VISIBLE
-        loadingSpinner.visibility = View.VISIBLE
-        statusText.text = "Loading video..."
-        channelText.text = ""
-        statsText.text = "Fetching ad-free stream & SponsorBlock..."
-        qualityBtn.text = "⚡ Quality"
-
-        val watchUrl = "https://www.youtube.com/watch?v=$videoId"
-
-        executor.execute {
-            try {
-                val info = StreamInfo.getInfo(ServiceList.YouTube, watchUrl)
-                val bestAudio: AudioStream? = info.audioStreams
-                    .filter { it.isUrl }
-                    .maxByOrNull { it.averageBitrate }
-
-                bestAudioDownloadUrl = bestAudio?.content
-                bestMuxedDownloadUrl = info.videoStreams.firstOrNull { it.isUrl }?.content
-
-                val options = mutableListOf<VideoQualityOption>()
-                if (bestAudio != null) {
-                    val seenHeights = HashSet<Int>()
-                    val sortedVideoOnly = info.videoOnlyStreams
-                        .filter { it.isUrl }
-                        .sortedByDescending { parseHeight(it.resolution) }
-
-                    for (vs in sortedVideoOnly) {
-                        val h = parseHeight(vs.resolution)
-                        if (h > 0 && seenHeights.add(h)) {
-                            options.add(
-                                VideoQualityOption(
-                                    label = "${h}p",
-                                    height = h,
-                                    videoUrl = vs.content,
-                                    audioUrl = bestAudio.content
+        if (isPipMode || isFullscreen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                NativeVideoPlayerBox(player, Modifier.fillMaxSize())
+            }
+        } else {
+            Scaffold(
+                containerColor = BgDark,
+                topBar = {
+                    if (!isPlayerVisible) TopBrandBar()
+                },
+                bottomBar = {
+                    if (!isPlayerVisible) {
+                        NavigationBar(containerColor = SurfaceDark) {
+                            NavigationBarItem(
+                                selected = selectedTab == 0,
+                                onClick = { selectedTab = 0 },
+                                icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
+                                label = { Text("Home") },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = AccentRed,
+                                    selectedTextColor = AccentRed,
+                                    indicatorColor = Color(0xFF2B161E)
+                                )
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 1,
+                                onClick = { selectedTab = 1 },
+                                icon = { Icon(Icons.Rounded.Search, contentDescription = "Search") },
+                                label = { Text("Search") },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = AccentRed,
+                                    selectedTextColor = AccentRed,
+                                    indicatorColor = Color(0xFF2B161E)
+                                )
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 2,
+                                onClick = { selectedTab = 2 },
+                                icon = { Icon(Icons.Rounded.History, contentDescription = "History") },
+                                label = { Text("History") },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = AccentRed,
+                                    selectedTextColor = AccentRed,
+                                    indicatorColor = Color(0xFF2B161E)
                                 )
                             )
                         }
                     }
                 }
+            ) { paddingValues ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                ) {
+                    if (isPlayerVisible) {
+                        PlayerDetailsScreen(player)
+                    } else {
+                        when (selectedTab) {
+                            0 -> HomeFeedScreen()
+                            1 -> SearchFeedScreen()
+                            else -> HistoryFeedScreen()
+                        }
+                    }
 
-                for (ms in info.videoStreams.filter { it.isUrl }) {
-                    val h = parseHeight(ms.resolution)
-                    val label = if (h > 0) "${h}p (Muxed)" else ms.resolution
-                    if (options.none { it.height == h }) {
-                        options.add(VideoQualityOption(label, h, ms.content, null))
+                    if (!isPlayerVisible && player.currentMediaItem != null) {
+                        MiniPlayerBar(
+                            player = player,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(8.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showQualityDialog) QualityPickerDialog()
+        if (showSpeedDialog) SpeedPickerDialog()
+        if (showSubtitleDialog) SubtitlePickerDialog()
+        if (showDownloadDialog) DownloadPickerDialog()
+    }
+
+    @Composable
+    private fun TopBrandBar() {
+        Surface(color = SurfaceDark, shadowElevation = 4.dp) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(AccentRed),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Text("WevloTube", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    color = Color(0xFF162E21),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFF22543D))
+                ) {
+                    Text(
+                        "AD-FREE",
+                        color = AccentGreen,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { selectedTab = 1 }) {
+                    Icon(Icons.Rounded.Search, contentDescription = "Search", tint = Color.White)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun HomeFeedScreen() {
+        Column(modifier = Modifier.fillMaxSize()) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(categories) { cat ->
+                    val selected = cat == selectedCategory
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (selected) AccentRed else CardDark,
+                        border = BorderStroke(1.dp, if (selected) AccentRed else ChipBorder),
+                        modifier = Modifier.clickable {
+                            selectedCategory = cat
+                            loadFeedForCategory(cat)
+                        }
+                    ) {
+                        Text(
+                            text = cat,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+            VideoListBody(homeVideos, isLoadingFeed, feedError, "লোড হচ্ছে...")
+        }
+    }
+
+    @Composable
+    private fun SearchFeedScreen() {
+        val keyboardController = LocalSoftwareKeyboardController.current
+        Column(modifier = Modifier.fillMaxSize()) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search YouTube (Ad-Free)...", color = TextSecondary) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    keyboardController?.hide()
+                    if (searchQuery.isNotBlank()) performSearch(searchQuery.trim())
+                }),
+                trailingIcon = {
+                    IconButton(onClick = {
+                        keyboardController?.hide()
+                        if (searchQuery.isNotBlank()) performSearch(searchQuery.trim())
+                    }) {
+                        Icon(Icons.Rounded.Search, contentDescription = "Search", tint = AccentRed)
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = AccentRed,
+                    unfocusedBorderColor = ChipBorder,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = CardDark,
+                    unfocusedContainerColor = CardDark
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            )
+            VideoListBody(searchVideos, isLoadingFeed, feedError, "উপরের বক্সে যেকোনো ভিডিও সার্চ করুন")
+        }
+    }
+
+    @Composable
+    private fun HistoryFeedScreen() {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Watch History", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                if (historyVideos.isNotEmpty()) {
+                    TextButton(onClick = { clearHistory() }) {
+                        Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = AccentRed)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Clear", color = AccentRed)
+                    }
+                }
+            }
+            VideoListBody(historyVideos, false, null, "এখনো কোনো ভিডিও দেখা হয়নি")
+        }
+    }
+
+    @Composable
+    private fun VideoListBody(
+        videos: List<VideoItemUi>,
+        isLoading: Boolean,
+        error: String?,
+        emptyText: String
+    ) {
+        when {
+            isLoading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = AccentRed)
+            }
+            error != null && videos.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(error, color = TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp))
+            }
+            videos.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(emptyText, color = TextSecondary)
+            }
+            else -> LazyColumn(
+                contentPadding = PaddingValues(bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                items(videos, key = { it.id }) { video ->
+                    VideoCard(video) { playVideoItem(video) }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun VideoCard(video: VideoItemUi, onClick: () -> Unit) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick() }
+                .padding(horizontal = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CardDark)
+            ) {
+                AsyncImage(
+                    model = video.thumbnailUrl,
+                    contentDescription = video.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Surface(
+                    color = Color(0xCC000000),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = YouTubeBackend.formatDuration(video.durationSec),
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Row(verticalAlignment = Alignment.Top) {
+                if (!video.avatarUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = video.avatarUrl,
+                        contentDescription = video.channelName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(CardDark)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(CardDark),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(video.channelName.take(1).uppercase(), color = AccentRed, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                if (!info.hlsUrl.isNullOrEmpty()) {
-                    options.add(VideoQualityOption("Auto (HLS)", 0, info.hlsUrl, null, isHls = true))
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = video.title,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    val meta = buildList {
+                        if (video.channelName.isNotBlank()) add(video.channelName)
+                        if (video.viewCount > 0) add("${YouTubeBackend.formatCount(video.viewCount)} views")
+                        if (!video.uploadDate.isNullOrBlank()) add(video.uploadDate)
+                    }.joinToString("  •  ")
+                    Text(meta, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun PlayerDetailsScreen(player: ExoPlayer) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            NativeVideoPlayerBox(
+                player = player,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+            )
+
+            if (downloadStatusText != null) {
+                Surface(color = Color(0xFF1D263B), modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                        Text(downloadStatusText ?: "", color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = AccentBlue)
+                    }
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                item {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(activeTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!activeAvatarUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = activeAvatarUrl,
+                                    contentDescription = activeChannel,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .clip(CircleShape)
+                                        .background(CardDark)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(activeChannel, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                if (activeViewsText.isNotBlank()) {
+                                    Text(activeViewsText, color = TextSecondary, fontSize = 11.sp)
+                                }
+                            }
+                            IconButton(onClick = { showDescription = !showDescription }) {
+                                Icon(
+                                    if (showDescription) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = "Description",
+                                    tint = Color.White
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (activeVotesText != null) InfoBadgePill(Icons.Rounded.ThumbUp, activeVotesText!!, Color.White)
+                            if (activeDislikesText != null) InfoBadgePill(Icons.Rounded.ThumbDown, activeDislikesText!!, Color.White)
+                            InfoBadgePill(
+                                Icons.Rounded.Shield,
+                                if (sponsorCount > 0) "$sponsorCount skips" else "0% Ads",
+                                AccentGreen
+                            )
+                        }
+
+                        if (showDescription && activeDescription.isNotBlank()) {
+                            Spacer(Modifier.height(10.dp))
+                            Surface(color = CardDark, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                Text(activeDescription, color = Color(0xFFD4D4E0), fontSize = 12.sp, modifier = Modifier.padding(12.dp))
+                            }
+                        }
+                    }
+
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item { ActionChip(Icons.Rounded.HighQuality, currentQualityLabel, true) { showQualityDialog = true } }
+                        item { ActionChip(Icons.Rounded.Speed, "${currentSpeed}x") { showSpeedDialog = true } }
+                        item {
+                            ActionChip(
+                                Icons.Rounded.ClosedCaption,
+                                if (currentSubtitleLabel == "Off") "CC" else currentSubtitleLabel,
+                                currentSubtitleLabel != "Off"
+                            ) { showSubtitleDialog = true }
+                        }
+                        item {
+                            ActionChip(Icons.Rounded.SkipNext, if (autoPlayNext) "AutoNext" else "No Next", autoPlayNext) {
+                                autoPlayNext = !autoPlayNext
+                            }
+                        }
+                        item {
+                            ActionChip(Icons.Rounded.Repeat, if (isLooping) "Loop ON" else "Loop", isLooping) {
+                                isLooping = !isLooping
+                                player.repeatMode = if (isLooping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+                            }
+                        }
+                        item {
+                            ActionChip(Icons.Rounded.ZoomOutMap, if (isZoomed) "Zoom" else "Fit") {
+                                isZoomed = !isZoomed
+                                playerViewRef?.resizeMode = if (isZoomed) {
+                                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                } else {
+                                    AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                }
+                            }
+                        }
+                        item { ActionChip(Icons.Rounded.PictureInPictureAlt, "PiP") { enterPipMode() } }
+                        item {
+                            ActionChip(Icons.Rounded.Headphones, if (bgPlayEnabled) "BG ON" else "BG OFF", bgPlayEnabled) {
+                                bgPlayEnabled = !bgPlayEnabled
+                                if (!bgPlayEnabled) {
+                                    stopService(Intent(this@MainActivity, BgPlaybackService::class.java))
+                                } else if (player.isPlaying) {
+                                    startBgPlaybackService()
+                                }
+                            }
+                        }
+                        item { ActionChip(Icons.Rounded.Download, "Download HD") { showDownloadDialog = true } }
+                        item { ActionChip(Icons.Rounded.Lock, "Lock") { setPlayerTouchLocked(true) } }
+                        item { ActionChip(Icons.Rounded.KeyboardArrowDown, "Minimize") { isPlayerVisible = false } }
+                        item { ActionChip(Icons.Rounded.Close, "Close") { closePlayer() } }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(color = ChipBorder)
+                    Text(
+                        text = "Up Next",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                    )
                 }
 
-                val defaultOption = options.firstOrNull { it.height == 720 }
-                    ?: options.firstOrNull { it.height == 480 }
-                    ?: options.firstOrNull()
+                items(relatedVideos, key = { "rel_${it.id}" }) { rel ->
+                    VideoCard(rel) { playVideoItem(rel) }
+                    Spacer(Modifier.height(14.dp))
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun InfoBadgePill(icon: ImageVector, label: String, tint: Color) {
+        Surface(color = CardDark, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, ChipBorder)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(5.dp))
+                Text(label, color = tint, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+
+    @Composable
+    private fun ActionChip(icon: ImageVector, label: String, isHighlighted: Boolean = false, onClick: () -> Unit) {
+        Surface(
+            color = if (isHighlighted) Color(0xFF2B161E) else CardDark,
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, if (isHighlighted) AccentRed else ChipBorder),
+            modifier = Modifier.clickable { onClick() }
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Icon(icon, contentDescription = label, tint = if (isHighlighted) AccentRed else Color.White, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+
+    @Composable
+    private fun MiniPlayerBar(player: ExoPlayer, modifier: Modifier = Modifier) {
+        Surface(
+            color = CardDark,
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, ChipBorder),
+            shadowElevation = 8.dp,
+            modifier = modifier
+                .fillMaxWidth()
+                .clickable { isPlayerVisible = true }
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = AccentRed)
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(activeTitle, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(activeChannel, color = TextSecondary, fontSize = 11.sp, maxLines = 1)
+                }
+                IconButton(onClick = { if (player.isPlaying) player.pause() else player.play() }) {
+                    Icon(
+                        if (isPlayingNow) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = "Play/Pause",
+                        tint = Color.White
+                    )
+                }
+                IconButton(onClick = { closePlayer() }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
+                }
+            }
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    @androidx.annotation.OptIn(UnstableApi::class)
+    @Composable
+    private fun NativeVideoPlayerBox(player: ExoPlayer, modifier: Modifier) {
+        Box(modifier = modifier.background(Color.Black)) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        resizeMode = if (isZoomed) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        controllerShowTimeoutMs = 2500
+                        setKeepContentOnPlayerReset(true)
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        setShowNextButton(false)
+                        setShowPreviousButton(false)
+                        setFullscreenButtonClickListener { shouldEnter -> toggleFullscreen(shouldEnter) }
+                        this.player = player
+                        attachGestureDetector(this)
+                        playerViewRef = this
+                    }
+                },
+                update = { pv ->
+                    if (pv.player !== player) pv.player = player
+                    pv.useController = !isPipMode && !isTouchLocked
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            if (isLoadingStream) {
+                CircularProgressIndicator(color = AccentRed, modifier = Modifier.align(Alignment.Center))
+            }
+
+            if (currentSubtitleText.isNotEmpty() && !isPipMode) {
+                Surface(
+                    color = Color(0xBF000000),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 24.dp, vertical = 22.dp)
+                ) {
+                    Text(
+                        text = currentSubtitleText,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            if (gestureText != null && !isPipMode) {
+                Surface(
+                    color = Color(0xCC14141E),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Color(0x44FFFFFF)),
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Text(
+                        text = gestureText ?: "",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
+                    )
+                }
+            }
+
+            if (isTouchLocked && !isPipMode) {
+                Surface(
+                    color = AccentRed,
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(14.dp)
+                        .clickable { setPlayerTouchLocked(false) }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                        Icon(Icons.Rounded.LockOpen, contentDescription = "Unlock", tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Unlock", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun attachGestureDetector(pv: PlayerView) {
+        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                val p = BgPlaybackService.player ?: return false
+                if (e.x < pv.width / 2f) {
+                    p.seekBack()
+                    showGesture("-10s")
+                } else {
+                    p.seekForward()
+                    showGesture("+10s")
+                }
+                return true
+            }
+
+            override fun onScroll(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                distanceX: Float,
+                distanceY: Float
+            ): Boolean {
+                if (e1 == null || abs(distanceY) < abs(distanceX)) return false
+                val w = pv.width.toFloat().coerceAtLeast(1f)
+                val h = pv.height.toFloat().coerceAtLeast(1f)
+                val delta = distanceY / h
+
+                if (e1.x < w / 2f) {
+                    brightnessRatio = (brightnessRatio + delta).coerceIn(0.05f, 1.0f)
+                    val lp = window.attributes
+                    lp.screenBrightness = brightnessRatio
+                    window.attributes = lp
+                    showGesture("Brightness ${(brightnessRatio * 100).toInt()}%")
+                } else {
+                    val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                    volumeRatio = (volumeRatio + delta).coerceIn(0.0f, 1.0f)
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (volumeRatio * maxVol).toInt(), 0)
+                    showGesture("Volume ${(volumeRatio * 100).toInt()}%")
+                }
+                return true
+            }
+        })
+
+        pv.setOnTouchListener { _, event ->
+            if (isTouchLocked) {
+                if (event.action == MotionEvent.ACTION_UP) showGesture("Locked — Tap Unlock")
+                return@setOnTouchListener true
+            }
+            gestureDetector.onTouchEvent(event)
+            false
+        }
+    }
+
+    private fun showGesture(msg: String) {
+        gestureText = msg
+        gestureTriggerTime = System.currentTimeMillis()
+    }
+
+    private fun setPlayerTouchLocked(locked: Boolean) {
+        isTouchLocked = locked
+        playerViewRef?.useController = !locked
+        if (locked) {
+            playerViewRef?.hideController()
+            showGesture("Touch Locked")
+        } else {
+            playerViewRef?.showController()
+            showGesture("Unlocked")
+        }
+    }
+
+    @Composable
+    private fun QualityPickerDialog() {
+        AlertDialog(
+            onDismissRequest = { showQualityDialog = false },
+            containerColor = SurfaceDark,
+            title = { Text("Video Quality", color = Color.White) },
+            text = {
+                LazyColumn {
+                    items(availableQualities) { opt ->
+                        Text(
+                            opt.label,
+                            color = if (opt.label == currentQualityLabel) AccentRed else Color.White,
+                            fontWeight = if (opt.label == currentQualityLabel) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val pos = BgPlaybackService.player?.currentPosition ?: 0L
+                                    startOptionInPlayer(opt, pos)
+                                    showQualityDialog = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showQualityDialog = false }) { Text("Close", color = AccentRed) } }
+        )
+    }
+
+    @Composable
+    private fun SpeedPickerDialog() {
+        val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+        AlertDialog(
+            onDismissRequest = { showSpeedDialog = false },
+            containerColor = SurfaceDark,
+            title = { Text("Playback Speed", color = Color.White) },
+            text = {
+                Column {
+                    speeds.forEach { sp ->
+                        Text(
+                            text = if (sp == 1.0f) "1.0x (Normal)" else "${sp}x",
+                            color = if (sp == currentSpeed) AccentRed else Color.White,
+                            fontWeight = if (sp == currentSpeed) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentSpeed = sp
+                                    BgPlaybackService.player?.setPlaybackSpeed(sp)
+                                    showSpeedDialog = false
+                                }
+                                .padding(vertical = 11.dp, horizontal = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSpeedDialog = false }) { Text("Close", color = AccentRed) } }
+        )
+    }
+
+    @Composable
+    private fun SubtitlePickerDialog() {
+        AlertDialog(
+            onDismissRequest = { showSubtitleDialog = false },
+            containerColor = SurfaceDark,
+            title = { Text("Subtitles (CC)", color = Color.White) },
+            text = {
+                LazyColumn {
+                    item {
+                        Text(
+                            "Off",
+                            color = if (currentSubtitleLabel == "Off") AccentRed else Color.White,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentSubtitleLabel = "Off"
+                                    activeCues = emptyList()
+                                    currentSubtitleText = ""
+                                    showSubtitleDialog = false
+                                }
+                                .padding(vertical = 11.dp, horizontal = 8.dp)
+                        )
+                    }
+                    items(availableSubtitles) { sub ->
+                        Text(
+                            sub.label,
+                            color = if (sub.label == currentSubtitleLabel) AccentRed else Color.White,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentSubtitleLabel = sub.label
+                                    executor.execute {
+                                        val parsed = YouTubeBackend.fetchAndParseVtt(sub.url)
+                                        runOnUiThread { activeCues = parsed }
+                                    }
+                                    showSubtitleDialog = false
+                                }
+                                .padding(vertical = 11.dp, horizontal = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSubtitleDialog = false }) { Text("Close", color = AccentRed) } }
+        )
+    }
+
+    @Composable
+    private fun DownloadPickerDialog() {
+        AlertDialog(
+            onDismissRequest = { showDownloadDialog = false },
+            containerColor = SurfaceDark,
+            title = { Text("Download Offline", color = Color.White) },
+            text = {
+                Column {
+                    if (bestHdVideoUrl != null && bestAudioM4aUrl != null) {
+                        Text(
+                            "HD Video ($bestHdLabel MP4) — MediaMuxer",
+                            color = AccentGreen,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showDownloadDialog = false
+                                    executor.execute {
+                                        YouTubeBackend.downloadAndMuxHdMp4(
+                                            context = applicationContext,
+                                            videoUrl = bestHdVideoUrl!!,
+                                            audioUrl = bestAudioM4aUrl!!,
+                                            title = activeTitle,
+                                            onProgress = { msg -> runOnUiThread { downloadStatusText = msg } },
+                                            onDone = { fileName ->
+                                                runOnUiThread {
+                                                    Toast.makeText(this@MainActivity, "Saved HD: Downloads/$fileName", Toast.LENGTH_LONG).show()
+                                                }
+                                            },
+                                            onError = { err ->
+                                                runOnUiThread {
+                                                    Toast.makeText(this@MainActivity, "HD Error: $err", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp)
+                        )
+                    }
+                    if (bestMuxedUrl != null) {
+                        Text(
+                            "Standard Video (360p MP4)",
+                            color = Color.White,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showDownloadDialog = false
+                                    try {
+                                        val name = YouTubeBackend.startSystemDownload(this@MainActivity, bestMuxedUrl!!, activeTitle, "mp4")
+                                        Toast.makeText(this@MainActivity, "Downloading Downloads/$name", Toast.LENGTH_LONG).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp)
+                        )
+                    }
+                    if (bestAudioM4aUrl != null) {
+                        Text(
+                            "Audio Only (M4A)",
+                            color = Color.White,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showDownloadDialog = false
+                                    try {
+                                        val name = YouTubeBackend.startSystemDownload(this@MainActivity, bestAudioM4aUrl!!, activeTitle, "m4a")
+                                        Toast.makeText(this@MainActivity, "Downloading Downloads/$name", Toast.LENGTH_LONG).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showDownloadDialog = false }) { Text("Cancel", color = AccentRed) } }
+        )
+    }
+
+    private fun loadFeedForCategory(category: String) {
+        val query = when (category) {
+            "Popular" -> "trending music tech 2026"
+            "Bangla" -> "bangla natok music tech"
+            else -> "$category latest videos"
+        }
+        isLoadingFeed = true
+        feedError = null
+        executor.execute {
+            try {
+                val items = YouTubeBackend.searchVideos(query)
+                runOnUiThread {
+                    homeVideos = items
+                    isLoadingFeed = false
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    feedError = "ফিড লোড হয়নি: ${e.localizedMessage}"
+                    isLoadingFeed = false
+                }
+            }
+        }
+    }
+
+    private fun performSearch(query: String) {
+        isLoadingFeed = true
+        feedError = null
+        executor.execute {
+            try {
+                val items = YouTubeBackend.searchVideos(query)
+                runOnUiThread {
+                    searchVideos = items
+                    isLoadingFeed = false
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    feedError = "Search error: ${e.localizedMessage}"
+                    isLoadingFeed = false
+                }
+            }
+        }
+    }
+
+    private fun playVideoItem(item: VideoItemUi) {
+        playYouTubeById(item.id, item.title, item.channelName, item.avatarUrl)
+    }
+
+    private fun playYouTubeById(
+        videoId: String,
+        previewTitle: String,
+        previewChannel: String,
+        previewAvatar: String?
+    ) {
+        activeVideoId = videoId
+        isPlayerVisible = true
+        isLoadingStream = true
+        activeTitle = previewTitle
+        activeChannel = previewChannel
+        activeAvatarUrl = previewAvatar
+        activeViewsText = ""
+        activeDescription = ""
+        activeVotesText = null
+        activeDislikesText = null
+        sponsorCount = 0
+        sponsorSegments = emptyList()
+        lastSkippedEndMs = -1L
+        availableSubtitles = emptyList()
+        currentSubtitleLabel = "Off"
+        activeCues = emptyList()
+        currentSubtitleText = ""
+        bestHdVideoUrl = null
+        bestMuxedUrl = null
+        bestAudioM4aUrl = null
+        relatedVideos = emptyList()
+
+        executor.execute {
+            try {
+                val bundle = YouTubeBackend.loadStreamBundle(videoId)
+                val defaultOption = bundle.qualities.firstOrNull { it.height == 720 }
+                    ?: bundle.qualities.firstOrNull { it.height == 480 }
+                    ?: bundle.qualities.firstOrNull()
 
                 runOnUiThread {
-                    loadingSpinner.visibility = View.GONE
-                    availableQualities = options
+                    isLoadingStream = false
+                    availableQualities = bundle.qualities
+                    availableSubtitles = bundle.subtitles
+                    relatedVideos = bundle.relatedVideos
+                    bestHdVideoUrl = bundle.bestHdVideoUrl
+                    bestHdLabel = bundle.bestHdLabel
+                    bestMuxedUrl = bundle.bestMuxedUrl
+                    bestAudioM4aUrl = bundle.bestAudioM4aUrl
+
+                    activeTitle = bundle.title
+                    BgPlaybackService.currentTitle = bundle.title
+                    activeChannel = bundle.channelName
+                    activeAvatarUrl = bundle.avatarUrl ?: previewAvatar
+                    activeViewsText = bundle.viewsText
+                    activeDescription = bundle.description
+
+                    saveToHistory(bundle.historyItem)
+
                     if (defaultOption != null) {
-                        currentVideoTitle = info.name
-                        BgPlaybackService.currentTitle = info.name
-                        statusText.text = info.name
-                        val views = if (info.viewCount > 0) "${formatCount(info.viewCount)} views" else ""
-                        channelText.text = listOfNotNull(
-                            info.uploaderName?.takeIf { it.isNotBlank() },
-                            views.takeIf { it.isNotBlank() }
-                        ).joinToString("  •  ")
-                        saveToHistory(videoId, info.name)
-                        startOptionInPlayer(defaultOption, resumePositionMs = 0L)
+                        startOptionInPlayer(defaultOption, 0L)
                     } else {
-                        statusText.text = "ভিডিও স্ট্রিম পাওয়া যায়নি"
+                        Toast.makeText(this, "Stream পাওয়া যায়নি", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    loadingSpinner.visibility = View.GONE
-                    statusText.text = "Error: ${e.localizedMessage}"
+                    isLoadingStream = false
+                    Toast.makeText(this, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
         executor.execute {
-            val segs = fetchSponsorSegments(videoId)
+            val segs = YouTubeBackend.fetchSponsorSegments(videoId)
             sponsorSegments = segs
-            val votesText = fetchDislikeStats(videoId)
+            val votes = YouTubeBackend.fetchDislikeStats(videoId)
             runOnUiThread {
-                val sbInfo = if (segs.isNotEmpty()) "🛡 SponsorBlock: ${segs.size} skips" else "🛡 0% Ads"
-                statsText.text = if (votesText != null) "$votesText   •   $sbInfo" else sbInfo
-            }
-        }
-    }
-
-    private fun fetchSponsorSegments(videoId: String): List<SponsorSegment> {
-        val list = mutableListOf<SponsorSegment>()
-        try {
-            val apiUrl = "https://sponsor.ajay.app/api/skipSegments?videoID=$videoId&categories=%5B%22sponsor%22,%22selfpromo%22,%22interaction%22,%22intro%22,%22outro%22%5D"
-            val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 4000
-                readTimeout = 4000
-            }
-            if (conn.responseCode == 200) {
-                val body = conn.inputStream.bufferedReader().readText()
-                val arr = JSONArray(body)
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    val seg = obj.getJSONArray("segment")
-                    val startMs = (seg.getDouble(0) * 1000).toLong()
-                    val endMs = (seg.getDouble(1) * 1000).toLong()
-                    val cat = obj.optString("category", "sponsor")
-                    if (endMs > startMs + 500) {
-                        list.add(SponsorSegment(startMs, endMs, cat))
-                    }
+                sponsorCount = segs.size
+                if (votes != null) {
+                    activeVotesText = votes.first
+                    activeDislikesText = votes.second
                 }
             }
-            conn.disconnect()
-        } catch (_: Exception) {
-        }
-        return list
-    }
-
-    private fun fetchDislikeStats(videoId: String): String? {
-        return try {
-            val conn = (URL("https://returnyoutubedislikeapi.com/votes?videoId=$videoId").openConnection() as HttpURLConnection).apply {
-                connectTimeout = 4000
-                readTimeout = 4000
-            }
-            if (conn.responseCode == 200) {
-                val obj = JSONObject(conn.inputStream.bufferedReader().readText())
-                val likes = formatCount(obj.optLong("likes", 0))
-                val dislikes = formatCount(obj.optLong("dislikes", 0))
-                conn.disconnect()
-                "👍 $likes   👎 $dislikes"
-            } else {
-                conn.disconnect()
-                null
-            }
-        } catch (_: Exception) {
-            null
         }
     }
 
-    private fun formatCount(n: Long): String {
-        return when {
-            n >= 1_000_000 -> String.format("%.1fM", n / 1_000_000.0)
-            n >= 1_000 -> String.format("%.1fK", n / 1_000.0)
-            else -> n.toString()
-        }
-    }
-
-    private fun parseHeight(resolution: String?): Int {
-        if (resolution.isNullOrBlank()) return 0
-        val digits = Regex("(\\d+)").find(resolution)?.groupValues?.get(1)
-        return digits?.toIntOrNull() ?: 0
-    }
-
-    @OptIn(UnstableApi::class)
+    @androidx.annotation.OptIn(UnstableApi::class)
     private fun startOptionInPlayer(option: VideoQualityOption, resumePositionMs: Long) {
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
+        val dataSourceFactory = DefaultHttpDataSource.Factory().setUserAgent(YouTubeBackend.USER_AGENT)
 
         val mediaSource: MediaSource = if (option.isHls) {
-            HlsMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(option.videoUrl))
+            HlsMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(option.videoUrl))
         } else if (option.audioUrl != null) {
-            val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(option.videoUrl))
-            val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(option.audioUrl))
-            MergingMediaSource(videoSource, audioSource)
+            val vSrc = ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(option.videoUrl))
+            val aSrc = ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(option.audioUrl))
+            MergingMediaSource(vSrc, aSrc)
         } else {
-            ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(option.videoUrl))
+            ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(option.videoUrl))
         }
 
         currentQualityLabel = option.label
-        qualityBtn.text = "⚡ ${option.label}"
-
         val p = BgPlaybackService.ensurePlayer(applicationContext)
-        playerView.player = p
-
+        playerViewRef?.player = p
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
             .build()
@@ -983,187 +1367,73 @@ class MainActivity : Activity() {
         p.setPlaybackSpeed(currentSpeed)
         p.playWhenReady = true
 
-        if (bgPlayEnabled) {
-            startBgPlaybackService()
-        }
+        if (bgPlayEnabled) startBgPlaybackService()
     }
 
-    private fun showQualityDialog() {
-        if (availableQualities.isEmpty()) return
-        val labels = availableQualities.map { it.label }.toTypedArray()
-        val checked = availableQualities.indexOfFirst { it.label == currentQualityLabel }
-
-        AlertDialog.Builder(this)
-            .setTitle("Select Video Quality")
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                val selected = availableQualities[which]
-                val pos = BgPlaybackService.player?.currentPosition ?: 0L
-                startOptionInPlayer(selected, resumePositionMs = pos)
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+    private fun saveToHistory(item: VideoItemUi) {
+        val updated = listOf(item) + historyVideos.filter { it.id != item.id }.take(29)
+        historyVideos = updated
+        val arr = JSONArray()
+        for (v in updated) {
+            arr.put(JSONObject().apply {
+                put("id", v.id)
+                put("url", v.url)
+                put("title", v.title)
+                put("channel", v.channelName)
+                put("thumb", v.thumbnailUrl)
+                put("avatar", v.avatarUrl ?: "")
+                put("dur", v.durationSec)
+                put("views", v.viewCount)
+            })
+        }
+        getSharedPreferences("yt_history_v2", Context.MODE_PRIVATE).edit().putString("items", arr.toString()).apply()
     }
 
-    private fun showSpeedDialog() {
-        val speeds = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-        val labels = arrayOf("0.5x", "0.75x", "1.0x (Normal)", "1.25x", "1.5x", "2.0x")
-        val checked = speeds.indexOfFirst { it == currentSpeed }
-
-        AlertDialog.Builder(this)
-            .setTitle("Playback Speed")
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                currentSpeed = speeds[which]
-                speedBtn.text = "⏩ ${currentSpeed}x"
-                BgPlaybackService.player?.setPlaybackSpeed(currentSpeed)
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showDownloadDialog() {
-        val items = mutableListOf<String>()
-        val urls = mutableListOf<Pair<String, String>>()
-
-        bestMuxedDownloadUrl?.let {
-            items.add("Download Video (MP4)")
-            urls.add(it to "mp4")
-        }
-        bestAudioDownloadUrl?.let {
-            items.add("Download Audio Only (M4A)")
-            urls.add(it to "m4a")
-        }
-
-        if (items.isEmpty()) {
-            Toast.makeText(this, "Download stream পাওয়া যায়নি", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Download Offline")
-            .setItems(items.toTypedArray()) { _, which ->
-                val (url, ext) = urls[which]
-                startSystemDownload(url, ext)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun startSystemDownload(url: String, ext: String) {
-        try {
-            val safeName = currentVideoTitle.replace(Regex("[^a-zA-Z0-9._ -]"), "_").take(50)
-            val fileName = "${safeName}_${System.currentTimeMillis()}.$ext"
-            val req = DownloadManager.Request(Uri.parse(url))
-                .setTitle(currentVideoTitle)
-                .setDescription("Downloading $ext...")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-
-            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(req)
-            Toast.makeText(this, "Downloading to Downloads/$fileName", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "Download error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun saveToHistory(videoId: String, title: String) {
-        val prefs = getSharedPreferences("yt_history", Context.MODE_PRIVATE)
-        val arr = try {
-            JSONArray(prefs.getString("items", "[]"))
-        } catch (_: Exception) {
-            JSONArray()
-        }
-        val newArr = JSONArray()
-        newArr.put(JSONObject().apply {
-            put("id", videoId)
-            put("title", title)
-        })
+    private fun loadHistoryFromPrefs() {
+        val prefs = getSharedPreferences("yt_history_v2", Context.MODE_PRIVATE)
+        val arr = try { JSONArray(prefs.getString("items", "[]")) } catch (_: Exception) { JSONArray() }
+        val list = mutableListOf<VideoItemUi>()
         for (i in 0 until arr.length()) {
-            val item = arr.optJSONObject(i) ?: continue
-            if (item.optString("id") != videoId && newArr.length() < 30) {
-                newArr.put(item)
-            }
+            val o = arr.optJSONObject(i) ?: continue
+            list.add(
+                VideoItemUi(
+                    id = o.getString("id"),
+                    url = o.getString("url"),
+                    title = o.getString("title"),
+                    channelName = o.optString("channel", "YouTube"),
+                    thumbnailUrl = o.optString("thumb", ""),
+                    avatarUrl = o.optString("avatar", "").takeIf { it.isNotBlank() },
+                    durationSec = o.optLong("dur", 0),
+                    viewCount = o.optLong("views", 0),
+                    uploadDate = null
+                )
+            )
         }
-        prefs.edit().putString("items", newArr.toString()).apply()
+        historyVideos = list
     }
 
-    private fun showHistoryDialog() {
-        val prefs = getSharedPreferences("yt_history", Context.MODE_PRIVATE)
-        val arr = try {
-            JSONArray(prefs.getString("items", "[]"))
-        } catch (_: Exception) {
-            JSONArray()
+    private fun clearHistory() {
+        historyVideos = emptyList()
+        getSharedPreferences("yt_history_v2", Context.MODE_PRIVATE).edit().remove("items").apply()
+    }
+
+    private fun startBgPlaybackService() {
+        val intent = Intent(this, BgPlaybackService::class.java).apply {
+            action = BgPlaybackService.ACTION_START_OR_UPDATE
+            putExtra(BgPlaybackService.EXTRA_TITLE, activeTitle)
         }
-        if (arr.length() == 0) {
-            Toast.makeText(this, "History খালি আছে", Toast.LENGTH_SHORT).show()
-            return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
         }
-        val titles = Array(arr.length()) { i -> arr.getJSONObject(i).getString("title") }
-        AlertDialog.Builder(this)
-            .setTitle("Watch History")
-            .setItems(titles) { _, which ->
-                val id = arr.getJSONObject(which).getString("id")
-                playYouTubeVideo(id)
-            }
-            .setNeutralButton("Clear") { _, _ ->
-                prefs.edit().remove("items").apply()
-            }
-            .setNegativeButton("Close", null)
-            .show()
     }
 
     private fun enterPipMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val params = PictureInPictureParams.Builder()
-                .setAspectRatio(Rational(16, 9))
-                .build()
-            enterPictureInPictureMode(params)
+            enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build())
         } else {
             Toast.makeText(this, "PiP requires Android 8.0+", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (isInPictureInPictureMode) {
-            topMenuBar.visibility = View.GONE
-            controlBar1.visibility = View.GONE
-            actionScrollBar.visibility = View.GONE
-            webView.visibility = View.GONE
-            unlockBtn.visibility = View.GONE
-            playerView.useController = false
-            playerSection.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            playerFrame.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        } else {
-            playerView.useController = !isTouchLocked
-            if (!isFullscreen) {
-                topMenuBar.visibility = View.VISIBLE
-                controlBar1.visibility = View.VISIBLE
-                actionScrollBar.visibility = View.VISIBLE
-                webView.visibility = View.VISIBLE
-                val normalHeight = (resources.displayMetrics.widthPixels.coerceAtMost(
-                    resources.displayMetrics.heightPixels
-                ) * 9) / 16
-                playerSection.layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-                playerFrame.layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    normalHeight
-                )
-            }
         }
     }
 
@@ -1171,37 +1441,10 @@ class MainActivity : Activity() {
         isFullscreen = enter
         if (enter) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            topMenuBar.visibility = View.GONE
-            webView.visibility = View.GONE
-            controlBar1.visibility = View.GONE
-            actionScrollBar.visibility = View.GONE
-            playerFrame.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            playerSection.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
             setSystemUiHidden(true)
         } else {
             if (isTouchLocked) setPlayerTouchLocked(false)
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            val normalHeight = (resources.displayMetrics.widthPixels.coerceAtMost(
-                resources.displayMetrics.heightPixels
-            ) * 9) / 16
-            playerSection.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            playerFrame.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                normalHeight
-            )
-            topMenuBar.visibility = View.VISIBLE
-            controlBar1.visibility = View.VISIBLE
-            actionScrollBar.visibility = View.VISIBLE
-            webView.visibility = View.VISIBLE
             setSystemUiHidden(false)
         }
     }
@@ -1212,8 +1455,7 @@ class MainActivity : Activity() {
             val controller = window.insetsController ?: return
             if (hide) {
                 controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                controller.systemBarsBehavior =
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } else {
                 controller.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
             }
@@ -1232,23 +1474,9 @@ class MainActivity : Activity() {
         if (isTouchLocked) setPlayerTouchLocked(false)
         if (isFullscreen) toggleFullscreen(false)
         BgPlaybackService.player?.stop()
+        BgPlaybackService.player?.clearMediaItems()
         stopService(Intent(this, BgPlaybackService::class.java))
-        playerSection.visibility = View.GONE
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onBackPressed() {
-        if (isTouchLocked) {
-            showGestureBadge("🔒 Locked — Tap Unlock")
-        } else if (isFullscreen) {
-            toggleFullscreen(false)
-        } else if (webView.canGoBack()) {
-            webView.goBack()
-        } else if (playerSection.visibility == View.VISIBLE) {
-            closePlayer()
-        } else {
-            super.onBackPressed()
-        }
+        isPlayerVisible = false
     }
 
     override fun onStart() {
@@ -1258,11 +1486,7 @@ class MainActivity : Activity() {
             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
                 .build()
-            playerView.player = p
-            if (p.currentMediaItem != null) {
-                playerSection.visibility = View.VISIBLE
-                statusText.text = BgPlaybackService.currentTitle
-            }
+            playerViewRef?.player = p
         }
     }
 
@@ -1273,7 +1497,7 @@ class MainActivity : Activity() {
 
         val p = BgPlaybackService.player
         if (bgPlayEnabled && p != null && p.isPlaying) {
-            playerView.player = null
+            playerViewRef?.player = null
             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
                 .build()
@@ -1284,257 +1508,15 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        mainHandler.removeCallbacksAndMessages(null)
-        playerView.player = null
+        playerViewRef?.player = null
+        playerViewRef = null
         BgPlaybackService.onCloseFromNotification = null
+        BgPlaybackService.onPlaybackEnded = null
+        BgPlaybackService.onIsPlayingChanged = null
         if (!bgPlayEnabled || BgPlaybackService.player?.isPlaying != true) {
             stopService(Intent(this, BgPlaybackService::class.java))
         }
         executor.shutdownNow()
         super.onDestroy()
-    }
-}
-
-class BgPlaybackService : Service() {
-
-    private var mediaSession: MediaSession? = null
-
-    companion object {
-        const val ACTION_START_OR_UPDATE = "BG_START"
-        const val ACTION_TOGGLE = "BG_TOGGLE"
-        const val ACTION_STOP = "BG_STOP"
-        const val EXTRA_TITLE = "extra_title"
-        private const val CHANNEL_ID = "bg_playback_channel"
-        private const val NOTIF_ID = 202
-
-        var currentTitle: String = "WevloTube"
-        var player: ExoPlayer? = null
-        var onCloseFromNotification: (() -> Unit)? = null
-
-        @OptIn(UnstableApi::class)
-        fun ensurePlayer(context: Context): ExoPlayer {
-            val existing = player
-            if (existing != null) return existing
-
-            val audioAttrs = AudioAttributes.Builder()
-                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                .setUsage(C.USAGE_MEDIA)
-                .build()
-
-            val created = ExoPlayer.Builder(context.applicationContext)
-                .setSeekBackIncrementMs(10_000L)
-                .setSeekForwardIncrementMs(10_000L)
-                .setWakeMode(C.WAKE_MODE_NETWORK)
-                .setHandleAudioBecomingNoisy(true)
-                .setAudioAttributes(audioAttrs, true)
-                .build()
-
-            player = created
-            return created
-        }
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        ensurePlayer(applicationContext)
-
-        val session = MediaSession(this, "WevloTubeMediaSession").apply {
-            setCallback(object : MediaSession.Callback() {
-                override fun onPlay() {
-                    player?.play()
-                    refreshNotification()
-                }
-
-                override fun onPause() {
-                    player?.pause()
-                    refreshNotification()
-                }
-
-                override fun onStop() {
-                    stopPlaybackAndService()
-                }
-            })
-            isActive = true
-        }
-        mediaSession = session
-
-        player?.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                refreshNotification()
-            }
-        })
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_TOGGLE -> {
-                val p = player
-                if (p != null) {
-                    if (p.isPlaying) p.pause() else p.play()
-                }
-                refreshNotification()
-                return START_STICKY
-            }
-            ACTION_STOP -> {
-                stopPlaybackAndService()
-                return START_NOT_STICKY
-            }
-        }
-
-        val title = intent?.getStringExtra(EXTRA_TITLE)
-        if (!title.isNullOrBlank()) currentTitle = title
-        refreshNotification()
-        return START_STICKY
-    }
-
-    private fun stopPlaybackAndService() {
-        player?.stop()
-        onCloseFromNotification?.invoke()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
-        stopSelf()
-    }
-
-    private fun refreshNotification() {
-        val p = player
-        val isPlaying = p?.isPlaying == true
-        val pos = p?.currentPosition ?: 0L
-
-        val state = PlaybackState.Builder()
-            .setActions(
-                PlaybackState.ACTION_PLAY or
-                    PlaybackState.ACTION_PAUSE or
-                    PlaybackState.ACTION_PLAY_PAUSE or
-                    PlaybackState.ACTION_STOP
-            )
-            .setState(
-                if (isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
-                pos,
-                1.0f
-            )
-            .build()
-        mediaSession?.setPlaybackState(state)
-
-        val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-
-        val openAppIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), piFlags
-        )
-        val toggleIntent = PendingIntent.getService(
-            this, 1, Intent(this, BgPlaybackService::class.java).apply { action = ACTION_TOGGLE }, piFlags
-        )
-        val stopIntent = PendingIntent.getService(
-            this, 2, Intent(this, BgPlaybackService::class.java).apply { action = ACTION_STOP }, piFlags
-        )
-
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Background Audio",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-            Notification.Builder(this, CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }
-
-        val style = Notification.MediaStyle()
-            .setMediaSession(mediaSession?.sessionToken)
-            .setShowActionsInCompactView(0, 1)
-
-        @Suppress("DEPRECATION")
-        val notification = builder
-            .setContentTitle(currentTitle)
-            .setContentText(if (isPlaying) "Playing in background" else "Paused")
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentIntent(openAppIntent)
-            .setStyle(style)
-            .addAction(
-                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-                if (isPlaying) "Pause" else "Play",
-                toggleIntent
-            )
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
-            .setOngoing(isPlaying)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTIF_ID, notification)
-        }
-    }
-
-    override fun onDestroy() {
-        mediaSession?.isActive = false
-        mediaSession?.release()
-        mediaSession = null
-        player?.release()
-        player = null
-        super.onDestroy()
-    }
-}
-
-class OkHttpDownloader private constructor() : Downloader() {
-
-    private val client = OkHttpClient.Builder()
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
-
-    override fun execute(request: Request): Response {
-        val body: RequestBody? = request.dataToSend()?.toRequestBody(null)
-        val builder = okhttp3.Request.Builder()
-            .method(request.httpMethod(), body)
-            .url(request.url())
-
-        for ((name, values) in request.headers()) {
-            builder.removeHeader(name)
-            for (value in values) {
-                builder.addHeader(name, value)
-            }
-        }
-
-        if (request.headers()["User-Agent"].isNullOrEmpty()) {
-            builder.header(
-                "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
-            )
-        }
-
-        val okResponse = client.newCall(builder.build()).execute()
-        if (okResponse.code == 429) {
-            okResponse.close()
-            throw ReCaptchaException("reCaptcha Challenge requested", request.url())
-        }
-
-        val responseBody = okResponse.body?.string()
-        val latestUrl = okResponse.request.url.toString()
-
-        return Response(
-            okResponse.code,
-            okResponse.message,
-            okResponse.headers.toMultimap(),
-            responseBody,
-            latestUrl
-        )
-    }
-
-    companion object {
-        @Volatile
-        private var instance: OkHttpDownloader? = null
-
-        fun getInstance(): OkHttpDownloader {
-            return instance ?: synchronized(this) {
-                instance ?: OkHttpDownloader().also { instance = it }
-            }
-        }
     }
 }
