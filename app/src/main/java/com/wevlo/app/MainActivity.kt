@@ -20,6 +20,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -43,9 +44,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.media3.common.AudioAttributes
@@ -98,18 +100,24 @@ data class SponsorSegment(
 class MainActivity : Activity() {
 
     private lateinit var topMenuBar: LinearLayout
-    private lateinit var shortsToggleBtn: Button
+    private lateinit var shortsToggleBtn: TextView
     private lateinit var playerSection: LinearLayout
     private lateinit var playerFrame: FrameLayout
     private lateinit var playerView: PlayerView
+    private lateinit var loadingSpinner: ProgressBar
     private lateinit var gestureBadge: TextView
+    private lateinit var unlockBtn: TextView
     private lateinit var controlBar1: LinearLayout
-    private lateinit var controlBar2: LinearLayout
+    private lateinit var actionScrollBar: HorizontalScrollView
     private lateinit var statusText: TextView
+    private lateinit var channelText: TextView
     private lateinit var statsText: TextView
-    private lateinit var qualityBtn: Button
-    private lateinit var speedBtn: Button
-    private lateinit var bgPlayBtn: Button
+    private lateinit var qualityBtn: TextView
+    private lateinit var speedBtn: TextView
+    private lateinit var loopBtn: TextView
+    private lateinit var zoomBtn: TextView
+    private lateinit var bgPlayBtn: TextView
+    private lateinit var lockBtn: TextView
     private lateinit var webView: WebView
 
     private val executor = Executors.newFixedThreadPool(3)
@@ -119,10 +127,13 @@ class MainActivity : Activity() {
     private var currentQualityLabel = "Auto"
     private var currentSpeed = 1.0f
     private var isFullscreen = false
+    private var isLooping = false
+    private var isZoomed = false
+    private var isTouchLocked = false
     private var bgPlayEnabled = true
     private var blockShortsEnabled = false
 
-    private var currentVideoTitle: String = "AdFree Tube"
+    private var currentVideoTitle: String = "WevloTube"
     private var bestMuxedDownloadUrl: String? = null
     private var bestAudioDownloadUrl: String? = null
 
@@ -156,7 +167,7 @@ class MainActivity : Activity() {
                     if (pos in seg.startMs until (seg.endMs - 400) && lastSkippedEndMs != seg.endMs) {
                         lastSkippedEndMs = seg.endMs
                         p.seekTo(seg.endMs)
-                        showGestureBadge("Skipped ${seg.category}")
+                        showGestureBadge("⏭ Skipped ${seg.category}")
                         break
                     }
                 }
@@ -165,10 +176,51 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun roundedBg(fillHex: String, radiusDp: Int, strokeHex: String? = null): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(radiusDp).toFloat()
+            setColor(Color.parseColor(fillHex))
+            if (strokeHex != null) {
+                setStroke(dp(1), Color.parseColor(strokeHex))
+            }
+        }
+    }
+
+    private fun makePill(
+        label: String,
+        bgHex: String = "#23232E",
+        textHex: String = "#FFFFFF",
+        strokeHex: String = "#353545",
+        onClick: () -> Unit
+    ): TextView {
+        return TextView(this).apply {
+            text = label
+            setTextColor(Color.parseColor(textHex))
+            textSize = 12f
+            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = roundedBg(bgHex, 20, strokeHex)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, dp(8), 0)
+            }
+            setOnClickListener { onClick() }
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        window.statusBarColor = Color.parseColor("#0B0B0F")
+        window.navigationBarColor = Color.parseColor("#0B0B0F")
 
         NewPipe.init(OkHttpDownloader.getInstance())
         BgPlaybackService.ensurePlayer(applicationContext)
@@ -185,52 +237,87 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0F0F0F"))
+            setBackgroundColor(Color.parseColor("#0B0B0F"))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
 
+        // ১. আধুনিক ব্র্যান্ড হেডার বার
         topMenuBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#181818"))
-            setPadding(12, 8, 12, 8)
+            setBackgroundColor(Color.parseColor("#121218"))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
 
-        val homeBtn = Button(this).apply {
-            text = "Home"
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener { webView.loadUrl("https://m.youtube.com") }
+        val logoBadge = TextView(this).apply {
+            text = "▶"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            gravity = Gravity.CENTER
+            background = roundedBg("#FF2E4C", 8)
+            setPadding(dp(9), dp(4), dp(9), dp(4))
         }
 
-        val historyBtn = Button(this).apply {
-            text = "History"
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener { showHistoryDialog() }
+        val brandTitle = TextView(this).apply {
+            text = "WevloTube"
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
+            setPadding(dp(8), 0, dp(6), 0)
         }
 
-        shortsToggleBtn = Button(this).apply {
-            text = "Shorts: ON"
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f)
-            setOnClickListener {
-                blockShortsEnabled = !blockShortsEnabled
-                text = if (blockShortsEnabled) "Shorts: OFF" else "Shorts: ON"
-                injectYouTubeCss(webView)
-            }
+        val adFreeTag = TextView(this).apply {
+            text = "NO ADS"
+            setTextColor(Color.parseColor("#4ADE80"))
+            textSize = 9f
+            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
+            background = roundedBg("#162E21", 10, "#22543D")
+            setPadding(dp(6), dp(2), dp(6), dp(2))
         }
 
+        val spacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+        }
+
+        val homeBtn = makePill("🏠 Home", "#1E1E28", "#E4E4EB", "#2F2F3D") {
+            webView.loadUrl("https://m.youtube.com")
+        }
+
+        val historyBtn = makePill("🕒", "#1E1E28", "#E4E4EB", "#2F2F3D") {
+            showHistoryDialog()
+        }
+
+        shortsToggleBtn = makePill("Shorts: ON", "#1E1E28", "#E4E4EB", "#2F2F3D") {
+            blockShortsEnabled = !blockShortsEnabled
+            shortsToggleBtn.text = if (blockShortsEnabled) "Shorts: OFF" else "Shorts: ON"
+            shortsToggleBtn.background = roundedBg(
+                if (blockShortsEnabled) "#3B1822" else "#1E1E28",
+                20,
+                if (blockShortsEnabled) "#FF2E4C" else "#2F2F3D"
+            )
+            injectYouTubeCss(webView)
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        topMenuBar.addView(logoBadge)
+        topMenuBar.addView(brandTitle)
+        topMenuBar.addView(adFreeTag)
+        topMenuBar.addView(spacer)
         topMenuBar.addView(homeBtn)
         topMenuBar.addView(historyBtn)
         topMenuBar.addView(shortsToggleBtn)
 
+        // ২. অ্যাডভান্সড ExoPlayer সেকশন
         playerSection = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Color.parseColor("#121218"))
             visibility = if (BgPlaybackService.player?.currentMediaItem != null) View.VISIBLE else View.GONE
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -240,6 +327,7 @@ class MainActivity : Activity() {
 
         val playerHeight = (resources.displayMetrics.widthPixels * 9) / 16
         playerFrame = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 playerHeight
@@ -252,6 +340,8 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            controllerShowTimeoutMs = 2500
+            setKeepContentOnPlayerReset(true)
             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
             setShowNextButton(false)
             setShowPreviousButton(false)
@@ -260,13 +350,18 @@ class MainActivity : Activity() {
             }
         }
 
+        loadingSpinner = ProgressBar(this).apply {
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER)
+        }
+
         gestureBadge = TextView(this).apply {
             visibility = View.GONE
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#AA000000"))
-            textSize = 15f
-            setTypeface(null, Typeface.BOLD)
-            setPadding(28, 14, 28, 14)
+            background = roundedBg("#CC14141E", 20, "#44FFFFFF")
+            textSize = 14f
+            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
+            setPadding(dp(18), dp(10), dp(18), dp(10))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -274,76 +369,130 @@ class MainActivity : Activity() {
             )
         }
 
+        unlockBtn = TextView(this).apply {
+            visibility = View.GONE
+            text = "🔓 Unlock"
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
+            background = roundedBg("#CCFF2E4C", 20)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.END
+            ).apply {
+                setMargins(0, dp(14), dp(14), 0)
+            }
+            setOnClickListener { setPlayerTouchLocked(false) }
+        }
+
         playerFrame.addView(playerView)
+        playerFrame.addView(loadingSpinner)
         playerFrame.addView(gestureBadge)
+        playerFrame.addView(unlockBtn)
         playerView.player = BgPlaybackService.player
 
         setupPlayerGestures()
         setupBackgroundCallbacks()
 
+        // ৩. ভিডিও টাইটেল ও মেটাডেটা কার্ড
         controlBar1 = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#181818"))
-            setPadding(20, 12, 20, 4)
+            setBackgroundColor(Color.parseColor("#16161F"))
+            setPadding(dp(14), dp(10), dp(14), dp(8))
         }
 
         statusText = TextView(this).apply {
             text = BgPlaybackService.currentTitle
             setTextColor(Color.WHITE)
-            textSize = 14f
+            textSize = 15f
             maxLines = 2
-            setTypeface(null, Typeface.BOLD)
+            setTypeface(Typeface.SANS_SERIF, Typeface.BOLD)
+        }
+
+        channelText = TextView(this).apply {
+            text = ""
+            setTextColor(Color.parseColor("#A1A1B5"))
+            textSize = 12f
+            setPadding(0, dp(3), 0, dp(2))
         }
 
         statsText = TextView(this).apply {
-            text = "0% Ads  •  SponsorBlock Ready"
-            setTextColor(Color.parseColor("#AAAAAA"))
-            textSize = 12f
-            setPadding(0, 4, 0, 4)
+            text = "🛡 Ad-Free  •  SponsorBlock Active"
+            setTextColor(Color.parseColor("#4ADE80"))
+            textSize = 11.5f
+            setPadding(0, dp(2), 0, dp(2))
         }
 
         controlBar1.addView(statusText)
+        controlBar1.addView(channelText)
         controlBar1.addView(statsText)
 
-        controlBar2 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#202020"))
-            setPadding(8, 4, 8, 8)
+        // ৪. স্ক্রলযোগ্য আধুনিক প্লেয়ার অ্যাকশন পিল বার
+        actionScrollBar = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            setBackgroundColor(Color.parseColor("#121218"))
+            setPadding(dp(12), dp(6), dp(12), dp(10))
         }
 
-        qualityBtn = makeSmallBtn("Quality") { showQualityDialog() }
-        speedBtn = makeSmallBtn("1.0x") { showSpeedDialog() }
-        val pipBtn = makeSmallBtn("PiP") { enterPipMode() }
-        bgPlayBtn = makeSmallBtn("BG:ON") {
+        val pillRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        qualityBtn = makePill("⚡ Quality", "#242432", "#FFFFFF", "#FF2E4C") { showQualityDialog() }
+        speedBtn = makePill("⏩ 1.0x") { showSpeedDialog() }
+        loopBtn = makePill("🔁 Loop: OFF") { toggleLoopMode() }
+        zoomBtn = makePill("📐 Fit") { toggleZoomMode() }
+        val pipBtn = makePill("🖼 PiP") { enterPipMode() }
+        bgPlayBtn = makePill("🎧 BG: ON", "#182D24", "#4ADE80", "#22543D") {
             bgPlayEnabled = !bgPlayEnabled
-            bgPlayBtn.text = if (bgPlayEnabled) "BG:ON" else "BG:OFF"
+            bgPlayBtn.text = if (bgPlayEnabled) "🎧 BG: ON" else "🎧 BG: OFF"
+            bgPlayBtn.background = roundedBg(
+                if (bgPlayEnabled) "#182D24" else "#23232E",
+                20,
+                if (bgPlayEnabled) "#22543D" else "#353545"
+            )
+            bgPlayBtn.setTextColor(Color.parseColor(if (bgPlayEnabled) "#4ADE80" else "#FFFFFF"))
             if (!bgPlayEnabled) {
                 stopService(Intent(this, BgPlaybackService::class.java))
             } else if (BgPlaybackService.player?.isPlaying == true) {
                 startBgPlaybackService()
             }
         }
-        val saveBtn = makeSmallBtn("Save") { showDownloadDialog() }
-        val closeBtn = makeSmallBtn("✕") { closePlayer() }
+        lockBtn = makePill("🔒 Lock") { setPlayerTouchLocked(true) }
+        val saveBtn = makePill("⬇ Save", "#1D263B", "#93C5FD", "#2E4068") { showDownloadDialog() }
+        val closeBtn = makePill("✕ Close", "#321A22", "#FCA5A5", "#5C2636") { closePlayer() }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
 
-        controlBar2.addView(qualityBtn)
-        controlBar2.addView(speedBtn)
-        controlBar2.addView(pipBtn)
-        controlBar2.addView(bgPlayBtn)
-        controlBar2.addView(saveBtn)
-        controlBar2.addView(closeBtn)
+        pillRow.addView(qualityBtn)
+        pillRow.addView(speedBtn)
+        pillRow.addView(loopBtn)
+        pillRow.addView(zoomBtn)
+        pillRow.addView(pipBtn)
+        pillRow.addView(bgPlayBtn)
+        pillRow.addView(lockBtn)
+        pillRow.addView(saveBtn)
+        pillRow.addView(closeBtn)
+        actionScrollBar.addView(pillRow)
 
         playerSection.addView(playerFrame)
         playerSection.addView(controlBar1)
-        playerSection.addView(controlBar2)
+        playerSection.addView(actionScrollBar)
 
+        // ৫. আসল YouTube ফিড (WebView)
         webView = WebView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
                 1f
             )
+            setBackgroundColor(Color.parseColor("#0B0B0F"))
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -426,14 +575,44 @@ class MainActivity : Activity() {
         mainHandler.postDelayed(sponsorCheckRunnable, 500)
     }
 
-    private fun makeSmallBtn(label: String, onClick: () -> Unit): Button {
-        return Button(this).apply {
-            text = label
-            textSize = 10f
-            setPadding(4, 4, 4, 4)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener { onClick() }
+    private fun setPlayerTouchLocked(locked: Boolean) {
+        isTouchLocked = locked
+        playerView.useController = !locked
+        if (locked) {
+            playerView.hideController()
+            unlockBtn.visibility = View.VISIBLE
+            showGestureBadge("🔒 Touch Locked")
+        } else {
+            unlockBtn.visibility = View.GONE
+            playerView.showController()
+            showGestureBadge("🔓 Unlocked")
         }
+    }
+
+    private fun toggleLoopMode() {
+        isLooping = !isLooping
+        BgPlaybackService.player?.repeatMode = if (isLooping) {
+            Player.REPEAT_MODE_ONE
+        } else {
+            Player.REPEAT_MODE_OFF
+        }
+        loopBtn.text = if (isLooping) "🔁 Loop: ON" else "🔁 Loop: OFF"
+        loopBtn.background = roundedBg(
+            if (isLooping) "#182D24" else "#23232E",
+            20,
+            if (isLooping) "#22543D" else "#353545"
+        )
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun toggleZoomMode() {
+        isZoomed = !isZoomed
+        playerView.resizeMode = if (isZoomed) {
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        } else {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+        zoomBtn.text = if (isZoomed) "📐 Zoom" else "📐 Fit"
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -443,10 +622,10 @@ class MainActivity : Activity() {
                 val p = BgPlaybackService.player ?: return false
                 if (e.x < playerView.width / 2f) {
                     p.seekBack()
-                    showGestureBadge("<< 10s")
+                    showGestureBadge("⏪ -10s")
                 } else {
                     p.seekForward()
-                    showGestureBadge("10s >>")
+                    showGestureBadge("⏩ +10s")
                 }
                 return true
             }
@@ -467,20 +646,27 @@ class MainActivity : Activity() {
                     val lp = window.attributes
                     lp.screenBrightness = brightnessRatio
                     window.attributes = lp
-                    showGestureBadge("Brightness: ${(brightnessRatio * 100).toInt()}%")
+                    showGestureBadge("☀ Brightness ${(brightnessRatio * 100).toInt()}%")
                 } else {
                     val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
                     volumeRatio = (volumeRatio + delta).coerceIn(0.0f, 1.0f)
                     val newVol = (volumeRatio * maxVol).toInt()
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
-                    showGestureBadge("Volume: ${(volumeRatio * 100).toInt()}%")
+                    showGestureBadge("🔊 Volume ${(volumeRatio * 100).toInt()}%")
                 }
                 return true
             }
         })
 
         playerView.setOnTouchListener { _, event ->
+            if (isTouchLocked) {
+                if (event.action == MotionEvent.ACTION_UP) {
+                    unlockBtn.visibility = View.VISIBLE
+                    showGestureBadge("🔒 Locked — Tap Unlock")
+                }
+                return@setOnTouchListener true
+            }
             gestureDetector.onTouchEvent(event)
             false
         }
@@ -606,9 +792,11 @@ class MainActivity : Activity() {
         bestAudioDownloadUrl = null
 
         playerSection.visibility = View.VISIBLE
-        statusText.text = "Loading video (Ad-Free)..."
-        statsText.text = "Fetching streams & SponsorBlock..."
-        qualityBtn.text = "Quality"
+        loadingSpinner.visibility = View.VISIBLE
+        statusText.text = "Loading video..."
+        channelText.text = ""
+        statsText.text = "Fetching ad-free stream & SponsorBlock..."
+        qualityBtn.text = "⚡ Quality"
 
         val watchUrl = "https://www.youtube.com/watch?v=$videoId"
 
@@ -661,11 +849,17 @@ class MainActivity : Activity() {
                     ?: options.firstOrNull()
 
                 runOnUiThread {
+                    loadingSpinner.visibility = View.GONE
                     availableQualities = options
                     if (defaultOption != null) {
                         currentVideoTitle = info.name
                         BgPlaybackService.currentTitle = info.name
                         statusText.text = info.name
+                        val views = if (info.viewCount > 0) "${formatCount(info.viewCount)} views" else ""
+                        channelText.text = listOfNotNull(
+                            info.uploaderName?.takeIf { it.isNotBlank() },
+                            views.takeIf { it.isNotBlank() }
+                        ).joinToString("  •  ")
                         saveToHistory(videoId, info.name)
                         startOptionInPlayer(defaultOption, resumePositionMs = 0L)
                     } else {
@@ -674,6 +868,7 @@ class MainActivity : Activity() {
                 }
             } catch (e: Exception) {
                 runOnUiThread {
+                    loadingSpinner.visibility = View.GONE
                     statusText.text = "Error: ${e.localizedMessage}"
                 }
             }
@@ -684,8 +879,8 @@ class MainActivity : Activity() {
             sponsorSegments = segs
             val votesText = fetchDislikeStats(videoId)
             runOnUiThread {
-                val sbInfo = if (segs.isNotEmpty()) "SponsorBlock: ${segs.size} skips" else "SponsorBlock: 0"
-                statsText.text = if (votesText != null) "$votesText  •  $sbInfo" else "0% Ads  •  $sbInfo"
+                val sbInfo = if (segs.isNotEmpty()) "🛡 SponsorBlock: ${segs.size} skips" else "🛡 0% Ads"
+                statsText.text = if (votesText != null) "$votesText   •   $sbInfo" else sbInfo
             }
         }
     }
@@ -773,7 +968,7 @@ class MainActivity : Activity() {
         }
 
         currentQualityLabel = option.label
-        qualityBtn.text = option.label
+        qualityBtn.text = "⚡ ${option.label}"
 
         val p = BgPlaybackService.ensurePlayer(applicationContext)
         playerView.player = p
@@ -781,13 +976,13 @@ class MainActivity : Activity() {
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
             .build()
+        p.repeatMode = if (isLooping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         p.setMediaSource(mediaSource)
         p.prepare()
         if (resumePositionMs > 0L) p.seekTo(resumePositionMs)
         p.setPlaybackSpeed(currentSpeed)
         p.playWhenReady = true
 
-        // Foreground-এ থাকা অবস্থাতেই Service চালু করা (Android 14/15/16 নিয়ম অনুযায়ী)
         if (bgPlayEnabled) {
             startBgPlaybackService()
         }
@@ -819,7 +1014,7 @@ class MainActivity : Activity() {
             .setTitle("Playback Speed")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 currentSpeed = speeds[which]
-                speedBtn.text = "${currentSpeed}x"
+                speedBtn.text = "⏩ ${currentSpeed}x"
                 BgPlaybackService.player?.setPlaybackSpeed(currentSpeed)
                 dialog.dismiss()
             }
@@ -938,8 +1133,9 @@ class MainActivity : Activity() {
         if (isInPictureInPictureMode) {
             topMenuBar.visibility = View.GONE
             controlBar1.visibility = View.GONE
-            controlBar2.visibility = View.GONE
+            actionScrollBar.visibility = View.GONE
             webView.visibility = View.GONE
+            unlockBtn.visibility = View.GONE
             playerView.useController = false
             playerSection.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -950,11 +1146,11 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         } else {
-            playerView.useController = true
+            playerView.useController = !isTouchLocked
             if (!isFullscreen) {
                 topMenuBar.visibility = View.VISIBLE
                 controlBar1.visibility = View.VISIBLE
-                controlBar2.visibility = View.VISIBLE
+                actionScrollBar.visibility = View.VISIBLE
                 webView.visibility = View.VISIBLE
                 val normalHeight = (resources.displayMetrics.widthPixels.coerceAtMost(
                     resources.displayMetrics.heightPixels
@@ -978,7 +1174,7 @@ class MainActivity : Activity() {
             topMenuBar.visibility = View.GONE
             webView.visibility = View.GONE
             controlBar1.visibility = View.GONE
-            controlBar2.visibility = View.GONE
+            actionScrollBar.visibility = View.GONE
             playerFrame.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -989,6 +1185,7 @@ class MainActivity : Activity() {
             )
             setSystemUiHidden(true)
         } else {
+            if (isTouchLocked) setPlayerTouchLocked(false)
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             val normalHeight = (resources.displayMetrics.widthPixels.coerceAtMost(
                 resources.displayMetrics.heightPixels
@@ -1003,7 +1200,7 @@ class MainActivity : Activity() {
             )
             topMenuBar.visibility = View.VISIBLE
             controlBar1.visibility = View.VISIBLE
-            controlBar2.visibility = View.VISIBLE
+            actionScrollBar.visibility = View.VISIBLE
             webView.visibility = View.VISIBLE
             setSystemUiHidden(false)
         }
@@ -1032,6 +1229,7 @@ class MainActivity : Activity() {
     }
 
     private fun closePlayer() {
+        if (isTouchLocked) setPlayerTouchLocked(false)
         if (isFullscreen) toggleFullscreen(false)
         BgPlaybackService.player?.stop()
         stopService(Intent(this, BgPlaybackService::class.java))
@@ -1040,7 +1238,9 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (isFullscreen) {
+        if (isTouchLocked) {
+            showGestureBadge("🔒 Locked — Tap Unlock")
+        } else if (isFullscreen) {
             toggleFullscreen(false)
         } else if (webView.canGoBack()) {
             webView.goBack()
@@ -1055,7 +1255,6 @@ class MainActivity : Activity() {
         super.onStart()
         val p = BgPlaybackService.player
         if (p != null) {
-            // স্ক্রিন অন হলে ভিডিও ট্র্যাক আবার চালু করে PlayerView-তে যুক্ত করা
             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
                 .build()
@@ -1074,7 +1273,6 @@ class MainActivity : Activity() {
 
         val p = BgPlaybackService.player
         if (bgPlayEnabled && p != null && p.isPlaying) {
-            // SurfaceView ছেড়ে দিয়ে শুধু অডিও চালিয়ে রাখা (CPU ও ডেটা বাঁচবে + অডিও অফ হবে না)
             playerView.player = null
             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
@@ -1109,7 +1307,7 @@ class BgPlaybackService : Service() {
         private const val CHANNEL_ID = "bg_playback_channel"
         private const val NOTIF_ID = 202
 
-        var currentTitle: String = "AdFree Tube"
+        var currentTitle: String = "WevloTube"
         var player: ExoPlayer? = null
         var onCloseFromNotification: (() -> Unit)? = null
 
@@ -1140,7 +1338,7 @@ class BgPlaybackService : Service() {
         super.onCreate()
         ensurePlayer(applicationContext)
 
-        val session = MediaSession(this, "AdFreeTubeMediaSession").apply {
+        val session = MediaSession(this, "WevloTubeMediaSession").apply {
             setCallback(object : MediaSession.Callback() {
                 override fun onPlay() {
                     player?.play()
