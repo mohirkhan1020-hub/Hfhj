@@ -15,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AdFreeTube"
+rootProject.name = "WevloTube"
 include ':app'
