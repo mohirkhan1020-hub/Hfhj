@@ -12,7 +12,9 @@
 
     <application
         android:allowBackup="true"
-        android:label="AdFree Tube"
+        android:icon="@drawable/ic_app_logo"
+        android:label="WevloTube"
+        android:roundIcon="@drawable/ic_app_logo"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
