@@ -21,6 +21,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
 import android.media.AudioManager
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -46,7 +48,10 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -107,7 +112,6 @@ class MainActivity : Activity() {
     private lateinit var bgPlayBtn: Button
     private lateinit var webView: WebView
 
-    private var player: ExoPlayer? = null
     private val executor = Executors.newFixedThreadPool(3)
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -118,7 +122,6 @@ class MainActivity : Activity() {
     private var bgPlayEnabled = true
     private var blockShortsEnabled = false
 
-    private var currentVideoId: String? = null
     private var currentVideoTitle: String = "AdFree Tube"
     private var bestMuxedDownloadUrl: String? = null
     private var bestAudioDownloadUrl: String? = null
@@ -146,7 +149,7 @@ class MainActivity : Activity() {
 
     private val sponsorCheckRunnable = object : Runnable {
         override fun run() {
-            val p = player
+            val p = BgPlaybackService.player
             if (p != null && p.isPlaying) {
                 val pos = p.currentPosition
                 for (seg in sponsorSegments) {
@@ -168,6 +171,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         NewPipe.init(OkHttpDownloader.getInstance())
+        BgPlaybackService.ensurePlayer(applicationContext)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -188,7 +192,6 @@ class MainActivity : Activity() {
             )
         }
 
-        // ১. উপরের টুলবার (Home, History, Shorts Toggle)
         topMenuBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -225,11 +228,10 @@ class MainActivity : Activity() {
         topMenuBar.addView(historyBtn)
         topMenuBar.addView(shortsToggleBtn)
 
-        // ২. অ্যাড-ফ্রি ExoPlayer সেকশন
         playerSection = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
-            visibility = View.GONE
+            visibility = if (BgPlaybackService.player?.currentMediaItem != null) View.VISIBLE else View.GONE
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -274,17 +276,11 @@ class MainActivity : Activity() {
 
         playerFrame.addView(playerView)
         playerFrame.addView(gestureBadge)
-
-        player = ExoPlayer.Builder(this)
-            .setSeekBackIncrementMs(10_000L)
-            .setSeekForwardIncrementMs(10_000L)
-            .build()
-        playerView.player = player
+        playerView.player = BgPlaybackService.player
 
         setupPlayerGestures()
         setupBackgroundCallbacks()
 
-        // ৩. প্লেয়ারের নিচের টাইটেল ও লাইক/ডিসলাইক বার
         controlBar1 = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#181818"))
@@ -292,7 +288,7 @@ class MainActivity : Activity() {
         }
 
         statusText = TextView(this).apply {
-            text = "Loading..."
+            text = BgPlaybackService.currentTitle
             setTextColor(Color.WHITE)
             textSize = 14f
             maxLines = 2
@@ -309,7 +305,6 @@ class MainActivity : Activity() {
         controlBar1.addView(statusText)
         controlBar1.addView(statsText)
 
-        // ৪. প্লেয়ার অ্যাকশন বাটন বার (Quality, Speed, PiP, BG, Save, Close)
         controlBar2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -323,6 +318,11 @@ class MainActivity : Activity() {
         bgPlayBtn = makeSmallBtn("BG:ON") {
             bgPlayEnabled = !bgPlayEnabled
             bgPlayBtn.text = if (bgPlayEnabled) "BG:ON" else "BG:OFF"
+            if (!bgPlayEnabled) {
+                stopService(Intent(this, BgPlaybackService::class.java))
+            } else if (BgPlaybackService.player?.isPlaying == true) {
+                startBgPlaybackService()
+            }
         }
         val saveBtn = makeSmallBtn("Save") { showDownloadDialog() }
         val closeBtn = makeSmallBtn("✕") { closePlayer() }
@@ -338,7 +338,6 @@ class MainActivity : Activity() {
         playerSection.addView(controlBar1)
         playerSection.addView(controlBar2)
 
-        // ৫. নিচে আসল YouTube UI (WebView)
         webView = WebView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -441,7 +440,7 @@ class MainActivity : Activity() {
     private fun setupPlayerGestures() {
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                val p = player ?: return false
+                val p = BgPlaybackService.player ?: return false
                 if (e.x < playerView.width / 2f) {
                     p.seekBack()
                     showGestureBadge("<< 10s")
@@ -499,29 +498,17 @@ class MainActivity : Activity() {
     }
 
     private fun setupBackgroundCallbacks() {
-        BgPlaybackService.onTogglePlayPause = {
+        BgPlaybackService.onCloseFromNotification = {
             mainHandler.post {
-                val p = player
-                if (p != null) {
-                    if (p.isPlaying) p.pause() else p.play()
-                    updateBgNotificationState()
-                }
-            }
-        }
-        BgPlaybackService.onStopPlayback = {
-            mainHandler.post {
-                player?.pause()
-                stopService(Intent(this, BgPlaybackService::class.java))
+                playerSection.visibility = View.GONE
             }
         }
     }
 
-    private fun updateBgNotificationState() {
-        val isPlaying = player?.isPlaying == true
+    private fun startBgPlaybackService() {
         val intent = Intent(this, BgPlaybackService::class.java).apply {
-            action = BgPlaybackService.ACTION_UPDATE
+            action = BgPlaybackService.ACTION_START_OR_UPDATE
             putExtra(BgPlaybackService.EXTRA_TITLE, currentVideoTitle)
-            putExtra(BgPlaybackService.EXTRA_PLAYING, isPlaying)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -613,7 +600,6 @@ class MainActivity : Activity() {
 
     @OptIn(UnstableApi::class)
     private fun playYouTubeVideo(videoId: String) {
-        currentVideoId = videoId
         sponsorSegments = emptyList()
         lastSkippedEndMs = -1L
         bestMuxedDownloadUrl = null
@@ -626,7 +612,6 @@ class MainActivity : Activity() {
 
         val watchUrl = "https://www.youtube.com/watch?v=$videoId"
 
-        // ১. মূল স্ট্রিম বের করা
         executor.execute {
             try {
                 val info = StreamInfo.getInfo(ServiceList.YouTube, watchUrl)
@@ -679,6 +664,7 @@ class MainActivity : Activity() {
                     availableQualities = options
                     if (defaultOption != null) {
                         currentVideoTitle = info.name
+                        BgPlaybackService.currentTitle = info.name
                         statusText.text = info.name
                         saveToHistory(videoId, info.name)
                         startOptionInPlayer(defaultOption, resumePositionMs = 0L)
@@ -693,7 +679,6 @@ class MainActivity : Activity() {
             }
         }
 
-        // ২. SponsorBlock + Return YouTube Dislike লোড করা (প্যারালাল)
         executor.execute {
             val segs = fetchSponsorSegments(videoId)
             sponsorSegments = segs
@@ -790,12 +775,21 @@ class MainActivity : Activity() {
         currentQualityLabel = option.label
         qualityBtn.text = option.label
 
-        player?.apply {
-            setMediaSource(mediaSource)
-            prepare()
-            if (resumePositionMs > 0L) seekTo(resumePositionMs)
-            setPlaybackSpeed(currentSpeed)
-            playWhenReady = true
+        val p = BgPlaybackService.ensurePlayer(applicationContext)
+        playerView.player = p
+
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+            .build()
+        p.setMediaSource(mediaSource)
+        p.prepare()
+        if (resumePositionMs > 0L) p.seekTo(resumePositionMs)
+        p.setPlaybackSpeed(currentSpeed)
+        p.playWhenReady = true
+
+        // Foreground-এ থাকা অবস্থাতেই Service চালু করা (Android 14/15/16 নিয়ম অনুযায়ী)
+        if (bgPlayEnabled) {
+            startBgPlaybackService()
         }
     }
 
@@ -808,7 +802,7 @@ class MainActivity : Activity() {
             .setTitle("Select Video Quality")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 val selected = availableQualities[which]
-                val pos = player?.currentPosition ?: 0L
+                val pos = BgPlaybackService.player?.currentPosition ?: 0L
                 startOptionInPlayer(selected, resumePositionMs = pos)
                 dialog.dismiss()
             }
@@ -826,7 +820,7 @@ class MainActivity : Activity() {
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 currentSpeed = speeds[which]
                 speedBtn.text = "${currentSpeed}x"
-                player?.setPlaybackSpeed(currentSpeed)
+                BgPlaybackService.player?.setPlaybackSpeed(currentSpeed)
                 dialog.dismiss()
             }
             .setNegativeButton("Cancel", null)
@@ -1039,7 +1033,7 @@ class MainActivity : Activity() {
 
     private fun closePlayer() {
         if (isFullscreen) toggleFullscreen(false)
-        player?.stop()
+        BgPlaybackService.player?.stop()
         stopService(Intent(this, BgPlaybackService::class.java))
         playerSection.visibility = View.GONE
     }
@@ -1059,7 +1053,18 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        stopService(Intent(this, BgPlaybackService::class.java))
+        val p = BgPlaybackService.player
+        if (p != null) {
+            // স্ক্রিন অন হলে ভিডিও ট্র্যাক আবার চালু করে PlayerView-তে যুক্ত করা
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                .build()
+            playerView.player = p
+            if (p.currentMediaItem != null) {
+                playerSection.visibility = View.VISIBLE
+                statusText.text = BgPlaybackService.currentTitle
+            }
+        }
     }
 
     override fun onStop() {
@@ -1067,21 +1072,26 @@ class MainActivity : Activity() {
         val isPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode
         if (isPip) return
 
-        if (bgPlayEnabled && player?.isPlaying == true) {
-            updateBgNotificationState()
+        val p = BgPlaybackService.player
+        if (bgPlayEnabled && p != null && p.isPlaying) {
+            // SurfaceView ছেড়ে দিয়ে শুধু অডিও চালিয়ে রাখা (CPU ও ডেটা বাঁচবে + অডিও অফ হবে না)
+            playerView.player = null
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                .build()
         } else {
-            player?.pause()
+            p?.pause()
             stopService(Intent(this, BgPlaybackService::class.java))
         }
     }
 
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
-        stopService(Intent(this, BgPlaybackService::class.java))
-        BgPlaybackService.onTogglePlayPause = null
-        BgPlaybackService.onStopPlayback = null
-        player?.release()
-        player = null
+        playerView.player = null
+        BgPlaybackService.onCloseFromNotification = null
+        if (!bgPlayEnabled || BgPlaybackService.player?.isPlaying != true) {
+            stopService(Intent(this, BgPlaybackService::class.java))
+        }
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -1089,17 +1099,72 @@ class MainActivity : Activity() {
 
 class BgPlaybackService : Service() {
 
+    private var mediaSession: MediaSession? = null
+
     companion object {
-        const val ACTION_UPDATE = "BG_UPDATE"
+        const val ACTION_START_OR_UPDATE = "BG_START"
         const val ACTION_TOGGLE = "BG_TOGGLE"
         const val ACTION_STOP = "BG_STOP"
         const val EXTRA_TITLE = "extra_title"
-        const val EXTRA_PLAYING = "extra_playing"
         private const val CHANNEL_ID = "bg_playback_channel"
         private const val NOTIF_ID = 202
 
-        var onTogglePlayPause: (() -> Unit)? = null
-        var onStopPlayback: (() -> Unit)? = null
+        var currentTitle: String = "AdFree Tube"
+        var player: ExoPlayer? = null
+        var onCloseFromNotification: (() -> Unit)? = null
+
+        @OptIn(UnstableApi::class)
+        fun ensurePlayer(context: Context): ExoPlayer {
+            val existing = player
+            if (existing != null) return existing
+
+            val audioAttrs = AudioAttributes.Builder()
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .setUsage(C.USAGE_MEDIA)
+                .build()
+
+            val created = ExoPlayer.Builder(context.applicationContext)
+                .setSeekBackIncrementMs(10_000L)
+                .setSeekForwardIncrementMs(10_000L)
+                .setWakeMode(C.WAKE_MODE_NETWORK)
+                .setHandleAudioBecomingNoisy(true)
+                .setAudioAttributes(audioAttrs, true)
+                .build()
+
+            player = created
+            return created
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        ensurePlayer(applicationContext)
+
+        val session = MediaSession(this, "AdFreeTubeMediaSession").apply {
+            setCallback(object : MediaSession.Callback() {
+                override fun onPlay() {
+                    player?.play()
+                    refreshNotification()
+                }
+
+                override fun onPause() {
+                    player?.pause()
+                    refreshNotification()
+                }
+
+                override fun onStop() {
+                    stopPlaybackAndService()
+                }
+            })
+            isActive = true
+        }
+        mediaSession = session
+
+        player?.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                refreshNotification()
+            }
+        })
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -1107,42 +1172,67 @@ class BgPlaybackService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TOGGLE -> {
-                onTogglePlayPause?.invoke()
-                return START_NOT_STICKY
+                val p = player
+                if (p != null) {
+                    if (p.isPlaying) p.pause() else p.play()
+                }
+                refreshNotification()
+                return START_STICKY
             }
             ACTION_STOP -> {
-                onStopPlayback?.invoke()
-                stopSelf()
+                stopPlaybackAndService()
                 return START_NOT_STICKY
             }
         }
 
-        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "AdFree Tube"
-        val isPlaying = intent?.getBooleanExtra(EXTRA_PLAYING, true) ?: true
-        showNotification(title, isPlaying)
-        return START_NOT_STICKY
+        val title = intent?.getStringExtra(EXTRA_TITLE)
+        if (!title.isNullOrBlank()) currentTitle = title
+        refreshNotification()
+        return START_STICKY
     }
 
-    private fun showNotification(title: String, isPlaying: Boolean) {
+    private fun stopPlaybackAndService() {
+        player?.stop()
+        onCloseFromNotification?.invoke()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        stopSelf()
+    }
+
+    private fun refreshNotification() {
+        val p = player
+        val isPlaying = p?.isPlaying == true
+        val pos = p?.currentPosition ?: 0L
+
+        val state = PlaybackState.Builder()
+            .setActions(
+                PlaybackState.ACTION_PLAY or
+                    PlaybackState.ACTION_PAUSE or
+                    PlaybackState.ACTION_PLAY_PAUSE or
+                    PlaybackState.ACTION_STOP
+            )
+            .setState(
+                if (isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                pos,
+                1.0f
+            )
+            .build()
+        mediaSession?.setPlaybackState(state)
+
         val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
         val openAppIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            piFlags
+            this, 0, Intent(this, MainActivity::class.java), piFlags
         )
         val toggleIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, BgPlaybackService::class.java).apply { action = ACTION_TOGGLE },
-            piFlags
+            this, 1, Intent(this, BgPlaybackService::class.java).apply { action = ACTION_TOGGLE }, piFlags
         )
         val stopIntent = PendingIntent.getService(
-            this,
-            2,
-            Intent(this, BgPlaybackService::class.java).apply { action = ACTION_STOP },
-            piFlags
+            this, 2, Intent(this, BgPlaybackService::class.java).apply { action = ACTION_STOP }, piFlags
         )
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1158,14 +1248,19 @@ class BgPlaybackService : Service() {
             Notification.Builder(this)
         }
 
+        val style = Notification.MediaStyle()
+            .setMediaSession(mediaSession?.sessionToken)
+            .setShowActionsInCompactView(0, 1)
+
         @Suppress("DEPRECATION")
         val notification = builder
-            .setContentTitle(title)
+            .setContentTitle(currentTitle)
             .setContentText(if (isPlaying) "Playing in background" else "Paused")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(openAppIntent)
+            .setStyle(style)
             .addAction(
-                android.R.drawable.ic_media_pause,
+                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
                 if (isPlaying) "Pause" else "Play",
                 toggleIntent
             )
@@ -1178,6 +1273,15 @@ class BgPlaybackService : Service() {
         } else {
             startForeground(NOTIF_ID, notification)
         }
+    }
+
+    override fun onDestroy() {
+        mediaSession?.isActive = false
+        mediaSession?.release()
+        mediaSession = null
+        player?.release()
+        player = null
+        super.onDestroy()
     }
 }
 
